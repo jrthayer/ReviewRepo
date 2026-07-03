@@ -2,7 +2,7 @@ let reviews = [];
 
 async function init() {
   try {
-    const res = await fetch('data/reviews.json');
+    const res = await fetch('data/reviews.json?v=' + Date.now());
     reviews = await res.json();
   } catch {
     document.getElementById('app').innerHTML = '<p class="state-msg">Could not load reviews.json.</p>';

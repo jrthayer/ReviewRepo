@@ -532,14 +532,14 @@ function renderList() {
   if (hasGH) {
     html += reviews.map(r => `
       <div class="r-item ${editingId === r.id && !isLocalReview ? 'active' : ''}">
-        <button onclick="loadReview(${JSON.stringify(r.id)}, false)">${esc(r.title)}</button>
+        <button onclick="loadReview('${r.id}', false)">${esc(r.title)}</button>
       </div>`).join('');
   }
   if (hasLocal) {
     if (hasGH) html += '<hr class="r-sep">';
     html += localReviews.map(r => `
       <div class="r-item ${editingId === r.id && isLocalReview ? 'active' : ''}">
-        <button onclick="loadReview(${JSON.stringify(r.id)}, true)">${esc(r.title)}<span class="local-badge">LOCAL</span></button>
+        <button onclick="loadReview('${r.id}', true)">${esc(r.title)}<span class="local-badge">LOCAL</span></button>
       </div>`).join('');
   }
   el.innerHTML = html;
