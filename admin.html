@@ -203,6 +203,31 @@
     .settings-sep { border: none; border-top: 1px solid var(--border); margin: 0.7rem 0 0.6rem; }
     .settings-label { font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
 
+    /* ── Key visibility toggle ── */
+    .key-wrap { position: relative; }
+    .key-wrap input { padding-right: 3.5rem; }
+    .key-toggle {
+      position: absolute; right: 0; top: 0; height: 100%;
+      background: none; color: var(--muted); padding: 0 0.6rem;
+      font-size: 0.72rem; font-weight: 700;
+      border-left: 1px solid var(--border); border-radius: 0 4px 4px 0;
+    }
+    .key-toggle:hover { color: var(--text); opacity: 1; }
+
+    /* ── Local review indicators ── */
+    .local-warning {
+      background: #2e2500; border: 1px solid #6b5000;
+      border-radius: 4px; padding: 0.45rem 0.7rem;
+      font-size: 0.78rem; color: #f0c040;
+    }
+    .local-badge {
+      background: #6b5000; color: #f0c040;
+      font-size: 0.62rem; padding: 0.1rem 0.3rem;
+      border-radius: 3px; font-weight: 700;
+      margin-left: 0.35rem; vertical-align: middle;
+    }
+    .r-sep { border: none; border-top: 1px solid var(--border); margin: 0.25rem 0; }
+
     /* ── Preview panel ── */
     #right-panel h2 {
       font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em;
@@ -284,7 +309,12 @@
   <hr class="settings-sep">
   <p class="settings-label">Steam</p>
   <div class="settings-grid">
-    <label>Steam Web API Key<input id="steam-key" type="password" placeholder="Steam API key"></label>
+    <label>Steam Web API Key
+      <div class="key-wrap">
+        <input id="steam-key" type="password" placeholder="Steam API key">
+        <button type="button" class="key-toggle" id="key-toggle" onclick="toggleKeyVis()">Show</button>
+      </div>
+    </label>
     <label>Steam ID or Vanity URL<input id="steam-id" type="text" placeholder="76561198... or username"></label>
   </div>
   <div class="settings-actions">
@@ -314,6 +344,9 @@
     </div>
 
     <div id="form-heading">New Review</div>
+    <div id="local-warning" class="local-warning" style="display:none">
+      ⚠ This review is saved locally only — it will not appear on your site until you click <strong>Save to GitHub</strong>.
+    </div>
 
     <form id="review-form" onsubmit="return false">
 
@@ -378,6 +411,7 @@
 
       <div id="save-row">
         <button type="button" id="save-btn" onclick="saveReview()">Save to GitHub</button>
+        <button type="button" id="local-btn" class="secondary" onclick="saveLocally()">Save Locally</button>
         <button type="button" id="delete-btn" class="danger" style="display:none" onclick="deleteReview()">Delete</button>
         <span id="save-status" class="status"></span>
       </div>
@@ -395,10 +429,12 @@
 
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
-let reviews     = [];
-let fileSha     = null;
-let editingId   = null;
-let steamLibrary = [];
+let reviews      = [];
+let localReviews = [];
+let fileSha      = null;
+let editingId    = null;
+let isLocalReview = false;
+let steamLibrary  = [];
 
 // ── Config ───────────────────────────────────────────────────────────────────
 function getCfg() {
@@ -484,35 +520,54 @@ async function loadReviewList() {
 
 function renderList() {
   const el = document.getElementById('review-list');
-  if (!reviews.length) {
+  const hasGH    = reviews.length > 0;
+  const hasLocal  = localReviews.length > 0;
+
+  if (!hasGH && !hasLocal) {
     el.innerHTML = '<p class="hint" style="padding:0.5rem 0.6rem">No reviews yet.</p>';
     return;
   }
-  el.innerHTML = reviews.map(r => `
-    <div class="r-item ${editingId === r.id ? 'active' : ''}">
-      <button onclick="loadReview(${JSON.stringify(r.id)})">${esc(r.title)}</button>
-    </div>
-  `).join('');
+
+  let html = '';
+  if (hasGH) {
+    html += reviews.map(r => `
+      <div class="r-item ${editingId === r.id && !isLocalReview ? 'active' : ''}">
+        <button onclick="loadReview(${JSON.stringify(r.id)}, false)">${esc(r.title)}</button>
+      </div>`).join('');
+  }
+  if (hasLocal) {
+    if (hasGH) html += '<hr class="r-sep">';
+    html += localReviews.map(r => `
+      <div class="r-item ${editingId === r.id && isLocalReview ? 'active' : ''}">
+        <button onclick="loadReview(${JSON.stringify(r.id)}, true)">${esc(r.title)}<span class="local-badge">LOCAL</span></button>
+      </div>`).join('');
+  }
+  el.innerHTML = html;
 }
 
 // ── Form actions ──────────────────────────────────────────────────────────────
-function loadReview(id) {
-  const r = reviews.find(r => r.id === id);
+function loadReview(id, isLocal = false) {
+  const source = isLocal ? localReviews : reviews;
+  const r = source.find(r => r.id === id);
   if (!r) return;
   editingId = id;
+  isLocalReview = isLocal;
   setForm(r);
   document.getElementById('form-heading').textContent = 'Edit Review';
   document.getElementById('delete-btn').style.display = 'inline-block';
+  updateWarning();
   renderList();
   updatePreview();
 }
 
 function newReview() {
   editingId = null;
+  isLocalReview = false;
   clearForm();
   document.getElementById('form-heading').textContent = 'New Review';
   document.getElementById('delete-btn').style.display = 'none';
   setSt('save-status', '', false);
+  updateWarning();
   renderList();
   updatePreview();
 }
@@ -534,8 +589,15 @@ async function saveReview() {
     await pushFile(latest, `${idx >= 0 ? 'Update' : 'Add'} review: ${data.id}`);
     reviews = latest;
     editingId = data.id;
+    // if this was a local review, remove it from local storage now that it's on GitHub
+    if (isLocalReview) {
+      localReviews = localReviews.filter(r => r.id !== data.id);
+      localStorage.setItem('local_reviews', JSON.stringify(localReviews));
+      isLocalReview = false;
+    }
     document.getElementById('form-heading').textContent = 'Edit Review';
     document.getElementById('delete-btn').style.display = 'inline-block';
+    updateWarning();
     renderList();
     setSt('save-status', 'Saved to GitHub!', false);
   } catch (e) {
@@ -547,6 +609,17 @@ async function saveReview() {
 
 async function deleteReview() {
   if (!editingId) return;
+
+  if (isLocalReview) {
+    const title = localReviews.find(r => r.id === editingId)?.title || editingId;
+    if (!confirm(`Delete local review "${title}"?`)) return;
+    localReviews = localReviews.filter(r => r.id !== editingId);
+    localStorage.setItem('local_reviews', JSON.stringify(localReviews));
+    newReview();
+    setSt('save-status', 'Local review deleted.', false);
+    return;
+  }
+
   const title = reviews.find(r => r.id === editingId)?.title || editingId;
   if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
 
@@ -668,6 +741,34 @@ function updatePreview() {
       </div>
     </div>
   `;
+}
+
+// ── Local save ────────────────────────────────────────────────────────────────
+function saveLocally() {
+  const data = getForm();
+  if (!data.title || !data.id) { setSt('save-status', 'Title and ID are required.', true); return; }
+  const idx = localReviews.findIndex(r => r.id === data.id);
+  if (idx >= 0) localReviews[idx] = data; else localReviews.push(data);
+  localStorage.setItem('local_reviews', JSON.stringify(localReviews));
+  editingId = data.id;
+  isLocalReview = true;
+  document.getElementById('form-heading').textContent = 'Edit Review';
+  document.getElementById('delete-btn').style.display = 'inline-block';
+  updateWarning();
+  renderList();
+  setSt('save-status', 'Saved locally.', false);
+}
+
+function updateWarning() {
+  document.getElementById('local-warning').style.display = isLocalReview ? 'block' : 'none';
+}
+
+function toggleKeyVis() {
+  const input = document.getElementById('steam-key');
+  const btn   = document.getElementById('key-toggle');
+  const show  = input.type === 'password';
+  input.type  = show ? 'text' : 'password';
+  btn.textContent = show ? 'Hide' : 'Show';
 }
 
 // ── Steam library ─────────────────────────────────────────────────────────────
@@ -799,8 +900,10 @@ function b64decode(b64) {
   if (steamKey) set('steam-key', steamKey);
   if (steamId)  set('steam-id',  steamId);
 
+  localReviews = JSON.parse(localStorage.getItem('local_reviews') || '[]');
   set('f-date', today());
   updatePreview();
+  renderList();
 
   if (cfg.owner && cfg.repo && cfg.token) loadReviewList();
   else document.getElementById('settings').setAttribute('open', '');
