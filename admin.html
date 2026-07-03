@@ -686,9 +686,11 @@ async function resolveSteamId(input) {
 }
 
 async function loadSteamLibrary() {
-  const key     = localStorage.getItem('steam_key') || '';
-  const rawId   = localStorage.getItem('steam_id')  || '';
+  const key   = v('steam-key') || localStorage.getItem('steam_key') || '';
+  const rawId = v('steam-id')  || localStorage.getItem('steam_id')  || '';
   if (!key || !rawId) { setSt('steam-status', 'Enter your Steam API key and ID first.', true); return; }
+  localStorage.setItem('steam_key', key);
+  localStorage.setItem('steam_id', rawId);
 
   setSt('steam-status', 'Loading...', false);
   try {
