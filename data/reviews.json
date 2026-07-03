@@ -1,0 +1,24 @@
+[
+  {
+    "id": "elden-ring",
+    "title": "Elden Ring",
+    "recommended": true,
+    "summary": "A masterpiece of open-world design that earns every hour you put into it.",
+    "coverImage": "",
+    "hoursPlayed": 120,
+    "datePosted": "2024-03-15",
+    "body": "FromSoftware took everything that made their previous games great and wrapped it in a breathtaking open world. Every corner of the Lands Between rewards exploration, and the sense of discovery never fades.",
+    "pros": [
+      "Massive open world full of secrets",
+      "Challenging and deeply satisfying combat",
+      "Incredible boss variety and design",
+      "Rich, atmospheric lore"
+    ],
+    "cons": [
+      "PC performance issues at launch",
+      "Some late-game bosses feel overtuned",
+      "Minimal hand-holding can frustrate newcomers"
+    ],
+    "verdict": "One of the best games of the decade. If you have any interest in action RPGs, this is non-negotiable."
+  }
+]
