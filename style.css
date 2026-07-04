@@ -24,6 +24,9 @@ body {
 }
 
 header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   background: var(--surface);
   padding: 1rem 2rem;
   border-bottom: 2px solid var(--accent);
@@ -37,9 +40,7 @@ header {
   letter-spacing: 0.02em;
 }
 
-#site-title:hover {
-  color: var(--accent);
-}
+#site-title:hover { color: var(--accent); }
 
 #admin-link {
   color: var(--muted);
@@ -47,9 +48,7 @@ header {
   font-size: 0.85rem;
 }
 
-#admin-link:hover {
-  color: var(--text);
-}
+#admin-link:hover { color: var(--text); }
 
 #app {
   max-width: 860px;
@@ -57,24 +56,30 @@ header {
   padding: 0 1rem;
 }
 
-/* ── Review cards (list view) ── */
+/* ── Cards ── */
 
 .card {
   display: flex;
-  gap: 1.25rem;
+  flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 1.25rem;
   margin-bottom: 1rem;
-  text-decoration: none;
-  color: var(--text);
-  transition: border-color 0.2s, transform 0.15s;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  overflow: hidden;
 }
 
-.card:hover {
+.card:hover,
+.card.expanded {
   border-color: var(--accent);
-  transform: translateY(-2px);
+}
+
+.card-main {
+  display: flex;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  align-items: center;
 }
 
 .card-cover {
@@ -92,9 +97,21 @@ header {
   object-fit: cover;
 }
 
+.card-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .card-info h2 {
   font-size: 1.05rem;
   margin-bottom: 0.3rem;
+}
+
+.card-chevron {
+  color: var(--muted);
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  padding-left: 0.5rem;
 }
 
 /* ── Badges ── */
@@ -110,17 +127,10 @@ header {
   letter-spacing: 0.04em;
 }
 
-.badge.yes {
-  background: var(--green);
-  color: #0f2a1e;
-}
+.badge.yes { background: var(--green); color: #0f2a1e; }
+.badge.no  { background: var(--red);   color: #fff; }
 
-.badge.no {
-  background: var(--red);
-  color: #fff;
-}
-
-.card-info .summary {
+.summary {
   color: var(--muted);
   font-size: 0.88rem;
   margin-bottom: 0.35rem;
@@ -131,91 +141,64 @@ header {
   color: var(--muted);
 }
 
-/* ── Review detail ── */
+/* ── Expanded detail ── */
 
-.back-link {
-  display: inline-block;
-  color: var(--muted);
-  text-decoration: none;
-  font-size: 0.88rem;
-  margin-bottom: 1.5rem;
+.card-expanded {
+  border-top: 1px solid var(--border);
+  padding: 1.5rem;
+  animation: expandIn 0.18s ease;
 }
 
-.back-link:hover {
-  color: var(--text);
+@keyframes expandIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.review {
-  background: var(--surface);
-  border-radius: 8px;
-  padding: 2rem;
-}
-
-.review-cover {
-  width: 100%;
-  max-height: 280px;
-  object-fit: cover;
-  border-radius: 6px;
-  margin-bottom: 1.5rem;
-  display: block;
-}
-
-.review-header h1 {
-  font-size: 1.8rem;
-  margin-bottom: 0.5rem;
-}
-
-.review-header .meta {
-  margin-top: 0.4rem;
-}
-
-.review-body {
-  margin-top: 1.5rem;
+.expanded-body {
   line-height: 1.8;
-}
-
-.review-body p {
   margin-bottom: 1rem;
 }
 
-.review section {
-  margin-top: 1.5rem;
+.card-expanded section {
+  margin-top: 1.25rem;
 }
 
-.review section h3 {
-  font-size: 0.85rem;
+.card-expanded section h3 {
+  font-size: 0.82rem;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--accent);
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.5rem;
 }
 
-.review ul {
+.card-expanded ul {
   list-style: none;
   padding: 0;
 }
 
-.review ul li {
+.card-expanded ul li {
   padding: 0.2rem 0 0.2rem 1.2rem;
   position: relative;
 }
 
-.review ul li::before {
+.card-expanded ul li::before {
   content: '•';
   position: absolute;
   left: 0;
   color: var(--accent);
 }
 
-.verdict {
+.card-expanded .verdict {
   border-top: 1px solid var(--border);
-  padding-top: 1.5rem;
-  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  margin-top: 1.25rem;
 }
+
+/* ── Export button ── */
 
 .export-btn {
   display: inline-block;
-  margin-top: 2rem;
+  margin-top: 1.5rem;
   padding: 0.7rem 1.4rem;
   background: var(--accent);
   color: #fff;
@@ -227,14 +210,8 @@ header {
   transition: opacity 0.2s;
 }
 
-.export-btn:hover {
-  opacity: 0.85;
-}
-
-.export-btn.copied {
-  background: var(--green);
-  color: #0f2a1e;
-}
+.export-btn:hover  { opacity: 0.85; }
+.export-btn.copied { background: var(--green); color: #0f2a1e; }
 
 /* ── Empty / error states ── */
 

@@ -4,14 +4,23 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Game Reviews</title>
-  <link rel="stylesheet" href="style.css">
+  <script>
+    const _v = Date.now();
+    const _l = document.createElement('link');
+    _l.rel = 'stylesheet'; _l.href = 'style.css?v=' + _v;
+    document.head.appendChild(_l);
+  </script>
 </head>
 <body>
   <header>
-    <a href="#" id="site-title">Game Reviews</a>
+    <a href="index.html" id="site-title">Game Reviews</a>
     <a href="admin.html" id="admin-link">Admin</a>
   </header>
   <main id="app"></main>
-  <script src="app.js"></script>
+  <script>
+    const _s = document.createElement('script');
+    _s.src = 'app.js?v=' + _v;
+    document.body.appendChild(_s);
+  </script>
 </body>
 </html>
