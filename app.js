@@ -8,6 +8,12 @@ async function init() {
     document.getElementById('app').innerHTML = '<p class="state-msg">Could not load reviews.json.</p>';
     return;
   }
+  // merge local-only reviews (saved in admin but not yet pushed to GitHub)
+  const local = JSON.parse(localStorage.getItem('local_reviews') || '[]');
+  local.forEach(lr => {
+    if (!reviews.find(r => r.id === lr.id)) reviews.push(lr);
+  });
+
   window.addEventListener('hashchange', route);
   route();
 }
