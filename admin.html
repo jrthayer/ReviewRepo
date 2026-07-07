@@ -173,6 +173,44 @@
     .status.ok { color: var(--green); }
     .status.err { color: var(--red); }
 
+    /* ── Tag input ── */
+    #tag-input-wrap { position: relative; }
+    .tag-chips {
+      display: flex; flex-wrap: wrap; gap: 0.35rem;
+      margin-bottom: 0.35rem;
+    }
+    .tag-chip {
+      display: flex; align-items: center; gap: 0.3rem;
+      background: var(--border); color: var(--text);
+      border-radius: 999px; padding: 0.15rem 0.4rem 0.15rem 0.65rem;
+      font-size: 0.78rem;
+    }
+    .tag-chip button {
+      background: none; color: var(--muted); padding: 0 0.2rem;
+      font-size: 0.85rem; line-height: 1; border-radius: 50%;
+    }
+    .tag-chip button:hover { color: var(--text); opacity: 1; }
+    #tag-suggestions {
+      position: absolute;
+      z-index: 20;
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+      max-height: 180px;
+      overflow-y: auto;
+      display: none;
+    }
+    #tag-suggestions.open { display: block; }
+    .tag-suggestion {
+      padding: 0.35rem 0.6rem;
+      cursor: pointer;
+      font-size: 0.82rem;
+    }
+    .tag-suggestion:hover, .tag-suggestion.hl { background: var(--border); }
+    .tag-suggestion.create { color: var(--muted); font-style: italic; }
+
     /* ── Steam library search ── */
     #steam-search-wrap { position: relative; }
     #game-results {
@@ -381,6 +419,17 @@
         <input id="f-cover" type="url" placeholder="https://..." oninput="updatePreview()">
       </label>
 
+      <div class="dyn-section">
+        <label>Tags</label>
+        <div id="tags-chips" class="tag-chips"></div>
+        <div id="tag-input-wrap">
+          <input id="tag-input" type="text" placeholder="Type to add or create a tag..."
+                 oninput="filterTagSuggestions()" onfocus="filterTagSuggestions()"
+                 onkeydown="onTagKeydown(event)" autocomplete="off">
+          <div id="tag-suggestions"></div>
+        </div>
+      </div>
+
       <label>Hours Played
         <input id="f-hours" type="number" min="0" value="0" oninput="updatePreview()">
       </label>
@@ -435,6 +484,8 @@ let fileSha      = null;
 let editingId    = null;
 let isLocalReview = false;
 let steamLibrary  = [];
+let currentTags   = [];
+let tagHlIndex    = -1;
 
 // ── Config ───────────────────────────────────────────────────────────────────
 function getCfg() {
@@ -654,6 +705,7 @@ function getForm() {
     pros:        listItems('pros'),
     cons:        listItems('cons'),
     verdict:     v('f-verdict'),
+    tags:        [...currentTags],
   };
 }
 
@@ -670,6 +722,8 @@ function setForm(r) {
   if (radio) radio.checked = true;
   setListItems('pros', r.pros || []);
   setListItems('cons', r.cons || []);
+  currentTags = [...(r.tags || [])];
+  renderTags();
 }
 
 function clearForm() {
@@ -679,6 +733,8 @@ function clearForm() {
   document.querySelector('input[name="recommended"][value="true"]').checked = true;
   setListItems('pros', []);
   setListItems('cons', []);
+  currentTags = [];
+  renderTags();
 }
 
 // ── Dynamic lists ─────────────────────────────────────────────────────────────
@@ -710,6 +766,95 @@ function addItem(which, value = '') {
   if (!value) input.focus();
 }
 
+// ── Tags ──────────────────────────────────────────────────────────────────────
+function getAllTags() {
+  const set = new Set();
+  [...reviews, ...localReviews].forEach(r => (r.tags || []).forEach(t => set.add(t)));
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+function renderTags() {
+  const box = document.getElementById('tags-chips');
+  box.innerHTML = currentTags.map((t, i) => `
+    <span class="tag-chip">${esc(t)}<button type="button" onclick="removeTagAt(${i})">×</button></span>
+  `).join('');
+}
+
+function addTag(raw) {
+  const tag = raw.trim();
+  if (!tag) return;
+  if (!currentTags.some(t => t.toLowerCase() === tag.toLowerCase())) {
+    currentTags.push(tag);
+    renderTags();
+    updatePreview();
+  }
+  set('tag-input', '');
+  closeTagSuggestions();
+}
+
+function removeTagAt(i) {
+  currentTags.splice(i, 1);
+  renderTags();
+  updatePreview();
+}
+
+function closeTagSuggestions() {
+  const box = document.getElementById('tag-suggestions');
+  box.className = '';
+  box.innerHTML = '';
+  tagHlIndex = -1;
+}
+
+function filterTagSuggestions() {
+  const q   = document.getElementById('tag-input').value.trim().toLowerCase();
+  const box = document.getElementById('tag-suggestions');
+  const available = getAllTags().filter(t => !currentTags.some(ct => ct.toLowerCase() === t.toLowerCase()));
+  const hits = q ? available.filter(t => t.toLowerCase().includes(q)) : available;
+  tagHlIndex = -1;
+
+  if (!hits.length && !q) { box.className = ''; box.innerHTML = ''; return; }
+
+  let html = hits.slice(0, 12).map(t => `<div class="tag-suggestion" onmousedown="addTag('${esc(t).replace(/'/g, "\\'")}')">${esc(t)}</div>`).join('');
+  const exactMatch = available.some(t => t.toLowerCase() === q) || currentTags.some(t => t.toLowerCase() === q);
+  if (q && !exactMatch) {
+    html += `<div class="tag-suggestion create" onmousedown="addTag('${esc(q).replace(/'/g, "\\'")}')">+ Create "${esc(q)}"</div>`;
+  }
+  box.className = 'open';
+  box.innerHTML = html;
+}
+
+function onTagKeydown(e) {
+  const box = document.getElementById('tag-suggestions');
+  const items = [...box.querySelectorAll('.tag-suggestion')];
+
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (!items.length) return;
+    e.preventDefault();
+    tagHlIndex = e.key === 'ArrowDown'
+      ? (tagHlIndex + 1) % items.length
+      : (tagHlIndex - 1 + items.length) % items.length;
+    items.forEach((it, i) => it.classList.toggle('hl', i === tagHlIndex));
+    return;
+  }
+
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (tagHlIndex >= 0 && items[tagHlIndex]) items[tagHlIndex].dispatchEvent(new Event('mousedown'));
+    else addTag(e.target.value);
+    return;
+  }
+
+  if (e.key === ',') {
+    e.preventDefault();
+    addTag(e.target.value);
+    return;
+  }
+
+  if (e.key === 'Backspace' && !e.target.value && currentTags.length) {
+    removeTagAt(currentTags.length - 1);
+  }
+}
+
 // ── Preview ───────────────────────────────────────────────────────────────────
 function updatePreview() {
   const r = getForm();
@@ -733,6 +878,7 @@ function updatePreview() {
       <div class="steam-body">
         ${hasContent ? `
           ${r.summary ? `<p><em>${esc(r.summary)}</em></p>` : ''}
+          ${r.tags?.length ? `<p>${r.tags.map(t => esc(t)).join(' &middot; ')}</p>` : ''}
           ${r.body    ? `<p>${esc(r.body)}</p>` : ''}
           ${r.pros.length ? `<h4>Pros</h4><ul>${r.pros.map(p=>`<li>${esc(p)}</li>`).join('')}</ul>` : ''}
           ${r.cons.length ? `<h4>Cons</h4><ul>${r.cons.map(c=>`<li>${esc(c)}</li>`).join('')}</ul>` : ''}
@@ -914,6 +1060,9 @@ function b64decode(b64) {
   document.addEventListener('click', e => {
     if (!e.target.closest('#steam-search-wrap')) {
       document.getElementById('game-results').className = '';
+    }
+    if (!e.target.closest('#tag-input-wrap')) {
+      closeTagSuggestions();
     }
   });
 })();

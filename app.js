@@ -1,5 +1,6 @@
 let reviews = [];
 let expandedId = null;
+let activeTag = null;
 
 async function init() {
   try {
@@ -18,14 +19,46 @@ async function init() {
   render();
 }
 
+function allTags() {
+  const set = new Set();
+  reviews.forEach(r => (r.tags || []).forEach(t => set.add(t)));
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+function renderTagFilters() {
+  const el = document.getElementById('tag-filters');
+  const tags = allTags();
+  if (!tags.length) { el.innerHTML = ''; return; }
+
+  el.innerHTML = [
+    `<button class="tag-filter ${activeTag === null ? 'active' : ''}" data-tag="">All</button>`,
+    ...tags.map(t => `<button class="tag-filter ${activeTag === t ? 'active' : ''}" data-tag="${escHtml(t)}">${escHtml(t)}</button>`),
+  ].join('');
+
+  el.querySelectorAll('.tag-filter').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeTag = btn.dataset.tag || null;
+      render();
+    });
+  });
+}
+
 function render() {
+  renderTagFilters();
+
   const app = document.getElementById('app');
+  const visible = activeTag ? reviews.filter(r => (r.tags || []).includes(activeTag)) : reviews;
+
   if (!reviews.length) {
     app.innerHTML = '<p class="state-msg">No reviews yet.</p>';
     return;
   }
+  if (!visible.length) {
+    app.innerHTML = '<p class="state-msg">No reviews with this tag.</p>';
+    return;
+  }
 
-  app.innerHTML = reviews.map(r => {
+  app.innerHTML = visible.map(r => {
     const expanded = expandedId === r.id;
     return `
       <div class="card ${expanded ? 'expanded' : ''}" data-id="${escHtml(r.id)}">
@@ -38,6 +71,7 @@ function render() {
             <span class="badge ${r.recommended ? 'yes' : 'no'}">${r.recommended ? 'Recommended' : 'Not Recommended'}</span>
             <p class="summary">${escHtml(r.summary)}</p>
             <div class="meta">${r.hoursPlayed} hrs &middot; ${formatDate(r.datePosted)}</div>
+            ${r.tags?.length ? `<div class="tag-list">${r.tags.map(t => `<span class="tag-badge">${escHtml(t)}</span>`).join('')}</div>` : ''}
           </div>
           <div class="card-chevron">${expanded ? '▲' : '▼'}</div>
         </div>

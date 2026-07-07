@@ -56,6 +56,49 @@ header {
   padding: 0 1rem;
 }
 
+/* ── Tag filters ── */
+
+#tag-filters {
+  max-width: 860px;
+  margin: 1.5rem auto 0;
+  padding: 0 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tag-filter {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.tag-filter:hover { color: var(--text); border-color: var(--accent); }
+.tag-filter.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ── Tag badges on cards ── */
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.tag-badge {
+  background: var(--border);
+  color: var(--muted);
+  font-size: 0.7rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+}
+
 /* ── Cards ── */
 
 .card {
