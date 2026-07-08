@@ -164,6 +164,16 @@
     #form-heading { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.1rem; }
 
     .dyn-section > label { margin-bottom: 0.25rem; }
+
+    .review-tabs { display: flex; gap: 0.25rem; }
+    .review-tab {
+      background: var(--input-bg); color: var(--muted); border: 1px solid var(--border);
+      border-bottom: none; border-radius: 4px 4px 0 0; padding: 0.35rem 0.75rem;
+      font-size: 0.78rem; font-weight: 600; cursor: pointer; position: relative; top: 1px;
+    }
+    .review-tab.active { background: var(--panel); color: var(--text); border-color: var(--accent); }
+    .review-tab-panel { border-top-left-radius: 0; }
+
     .list-row { display: flex; gap: 0.35rem; margin-bottom: 0.35rem; }
     .list-row input { flex: 1; }
     .list-row button { background: var(--border); color: var(--text); flex-shrink: 0; padding: 0.3rem 0.55rem; }
@@ -300,6 +310,7 @@
 
     /* ── Site card preview (mirrors style.css) ── */
     #site-preview {
+      --sp-bg:      #1a1a2e;
       --sp-surface: #16213e;
       --sp-border:  #2a2a4a;
       --sp-accent:  #e94560;
@@ -337,6 +348,12 @@
     #site-preview .tag-list { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.45rem; }
     #site-preview .tag-badge { background: var(--sp-border); color: var(--sp-muted); font-size: 0.7rem; padding: 0.12rem 0.5rem; border-radius: 999px; }
     #site-preview .card-expanded { border-top: 1px solid var(--sp-border); padding: 1.5rem; }
+    #site-preview .review-tabs { display: flex; gap: 0.25rem; margin-bottom: 0.75rem; }
+    #site-preview .review-tab {
+      background: var(--sp-bg); color: var(--sp-muted); border: 1px solid var(--sp-border);
+      border-radius: 4px; padding: 0.35rem 0.85rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    }
+    #site-preview .review-tab.active { background: var(--sp-surface); color: var(--sp-text); border-color: var(--sp-accent); }
     #site-preview .expanded-body { line-height: 1.8; margin-bottom: 1rem; }
     #site-preview .card-expanded section { margin-top: 1.25rem; }
     #site-preview .card-expanded section h3 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--sp-accent); margin-bottom: 0.5rem; }
@@ -468,9 +485,14 @@
         <input id="f-date" type="date" oninput="updatePreview()">
       </label>
 
-      <label>Review Body
-        <textarea id="f-body" rows="5" placeholder="Main review text..." oninput="updatePreview()"></textarea>
-      </label>
+      <div class="dyn-section">
+        <div class="review-tabs">
+          <button type="button" class="review-tab active" data-tab="steam" onclick="switchReviewTab('steam')">Steam Review</button>
+          <button type="button" class="review-tab" data-tab="tab2" onclick="switchReviewTab('tab2')">Tab 2</button>
+        </div>
+        <textarea id="f-body" class="review-tab-panel" rows="5" placeholder="Main review text..." oninput="updatePreview()"></textarea>
+        <textarea id="f-tab2" class="review-tab-panel" rows="5" placeholder="Main review text..." oninput="updatePreview()" style="display:none"></textarea>
+      </div>
 
       <div class="dyn-section">
         <label>Pros</label>
@@ -707,6 +729,7 @@ function getForm() {
     hoursPlayed: Number(v('f-hours')) || 0,
     datePosted:  v('f-date'),
     body:        v('f-body'),
+    tab2:        v('f-tab2'),
     pros:        listItems('pros'),
     cons:        listItems('cons'),
     verdict:     v('f-verdict'),
@@ -722,6 +745,7 @@ function setForm(r) {
   set('f-hours',   r.hoursPlayed ?? 0);
   set('f-date',    r.datePosted  || '');
   set('f-body',    r.body        || '');
+  set('f-tab2',    r.tab2        || '');
   set('f-verdict', r.verdict     || '');
   const radio = document.querySelector(`input[name="recommended"][value="${r.recommended}"]`);
   if (radio) radio.checked = true;
@@ -729,10 +753,11 @@ function setForm(r) {
   setListItems('cons', r.cons || []);
   currentTags = [...(r.tags || [])];
   renderTags();
+  switchReviewTab('steam');
 }
 
 function clearForm() {
-  ['f-title','f-id','f-summary','f-cover','f-body','f-verdict'].forEach(id => set(id, ''));
+  ['f-title','f-id','f-summary','f-cover','f-body','f-tab2','f-verdict'].forEach(id => set(id, ''));
   set('f-hours', '0');
   set('f-date', today());
   document.querySelector('input[name="recommended"][value="true"]').checked = true;
@@ -740,6 +765,14 @@ function clearForm() {
   setListItems('cons', []);
   currentTags = [];
   renderTags();
+  switchReviewTab('steam');
+}
+
+// ── Review tabs (placeholder: "tab2" purpose/name TBD) ─────────────────────────
+function switchReviewTab(tab) {
+  document.querySelectorAll('.review-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+  document.getElementById('f-body').style.display = tab === 'steam' ? 'block' : 'none';
+  document.getElementById('f-tab2').style.display = tab === 'tab2'  ? 'block' : 'none';
 }
 
 // ── Dynamic lists ─────────────────────────────────────────────────────────────
@@ -862,6 +895,7 @@ function onTagKeydown(e) {
 
 // ── Preview ───────────────────────────────────────────────────────────────────
 let sitePreviewExpanded = true;
+let sitePreviewBodyTab  = 'steam';
 
 function updatePreview() {
   const r = getForm();
@@ -871,6 +905,11 @@ function updatePreview() {
 
 function renderSitePreview(r) {
   const expanded = sitePreviewExpanded;
+  const hasBody  = !!r.body;
+  const hasTab2  = !!r.tab2;
+  const showTabs = hasBody && hasTab2;
+  const bodyText = (sitePreviewBodyTab === 'tab2' && hasTab2) ? r.tab2 : r.body;
+
   document.getElementById('site-preview').innerHTML = `
     <div class="card ${expanded ? 'expanded' : ''}">
       <div class="card-main">
@@ -888,7 +927,14 @@ function renderSitePreview(r) {
       </div>
       ${expanded ? `
         <div class="card-expanded">
-          ${r.body ? `<p class="expanded-body">${esc(r.body)}</p>` : ''}
+          ${hasBody || hasTab2 ? `
+            ${showTabs ? `
+              <div class="review-tabs">
+                <button type="button" class="review-tab ${sitePreviewBodyTab === 'steam' ? 'active' : ''}" data-review-tab="steam">Steam Review</button>
+                <button type="button" class="review-tab ${sitePreviewBodyTab === 'tab2' ? 'active' : ''}" data-review-tab="tab2">Tab 2</button>
+              </div>` : ''}
+            <p class="expanded-body">${esc(bodyText)}</p>
+          ` : ''}
           ${r.pros.length ? `
             <section>
               <h3>Pros</h3>
@@ -910,8 +956,16 @@ function renderSitePreview(r) {
   `;
   document.querySelector('#site-preview .card-main').onclick = () => {
     sitePreviewExpanded = !sitePreviewExpanded;
+    sitePreviewBodyTab = 'steam';
     renderSitePreview(getForm());
   };
+  document.querySelectorAll('#site-preview .review-tab').forEach(btn => {
+    btn.onclick = e => {
+      e.stopPropagation();
+      sitePreviewBodyTab = btn.dataset.reviewTab;
+      renderSitePreview(getForm());
+    };
+  });
 }
 
 function renderSteamPreview(r) {

@@ -1,6 +1,7 @@
 let reviews = [];
 let expandedId = null;
 let activeTag = null;
+let expandedBodyTab = 'steam';
 
 async function init() {
   reviews = JSON.parse(localStorage.getItem('gh_reviews_cache') || '[]');
@@ -48,6 +49,10 @@ function render() {
 
   app.innerHTML = visible.map(r => {
     const expanded = expandedId === r.id;
+    const hasBody = !!r.body;
+    const hasTab2 = !!r.tab2;
+    const showTabs = hasBody && hasTab2;
+    const bodyText = (expandedBodyTab === 'tab2' && hasTab2) ? r.tab2 : r.body;
     return `
       <div class="card ${expanded ? 'expanded' : ''}" data-id="${escHtml(r.id)}">
         <div class="card-main">
@@ -65,7 +70,14 @@ function render() {
         </div>
         ${expanded ? `
           <div class="card-expanded">
-            ${r.body ? `<p class="expanded-body">${escHtml(r.body)}</p>` : ''}
+            ${hasBody || hasTab2 ? `
+              ${showTabs ? `
+                <div class="review-tabs">
+                  <button type="button" class="review-tab ${expandedBodyTab === 'steam' ? 'active' : ''}" data-review-tab="steam">Steam Review</button>
+                  <button type="button" class="review-tab ${expandedBodyTab === 'tab2' ? 'active' : ''}" data-review-tab="tab2">Tab 2</button>
+                </div>` : ''}
+              <p class="expanded-body">${escHtml(bodyText)}</p>
+            ` : ''}
             ${r.pros?.length ? `
               <section>
                 <h3>Pros</h3>
@@ -91,6 +103,15 @@ function render() {
     card.addEventListener('click', () => {
       const id = card.dataset.id;
       expandedId = expandedId === id ? null : id;
+      expandedBodyTab = 'steam';
+      render();
+    });
+  });
+
+  app.querySelectorAll('.review-tab').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      expandedBodyTab = btn.dataset.reviewTab;
       render();
     });
   });
