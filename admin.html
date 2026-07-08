@@ -371,6 +371,14 @@
   <!-- ── Left: form ── -->
   <div id="left-panel">
 
+    <div id="steam-search-wrap">
+      <label>Import from Steam Library
+        <input id="game-search" type="text" placeholder="Type to search your library..."
+               oninput="filterGames()" onfocus="filterGames()" autocomplete="off">
+      </label>
+      <div id="game-results"></div>
+    </div>
+
     <div id="existing-reviews">
       <div class="panel-hdr">
         <strong>Reviews</strong>
@@ -388,20 +396,12 @@
 
     <form id="review-form" onsubmit="return false">
 
-      <div id="steam-search-wrap">
-        <label>Import from Steam Library
-          <input id="game-search" type="text" placeholder="Type to search your library..."
-                 oninput="filterGames()" onfocus="filterGames()" autocomplete="off">
-        </label>
-        <div id="game-results"></div>
-      </div>
-
       <label>Game Title
         <input id="f-title" type="text" placeholder="e.g. Elden Ring" oninput="syncId(); updatePreview()">
       </label>
 
       <label>ID (URL slug — auto-filled)
-        <input id="f-id" type="text" placeholder="e.g. elden-ring" oninput="updatePreview()">
+        <input id="f-id" type="text" placeholder="e.g. elden-ring" readonly>
       </label>
 
       <label>Recommendation
@@ -994,14 +994,26 @@ function filterGames() {
 function selectGame(appid) {
   const game = steamLibrary.find(g => g.appid === appid);
   if (!game) return;
-  set('f-title', game.name);
-  set('f-hours', Math.round(game.playtime_forever / 60));
-  set('f-cover', `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`);
+
+  const sameTitle = t => t.trim().toLowerCase() === game.name.trim().toLowerCase();
+  const ghMatch = reviews.find(r => sameTitle(r.title));
+  const localMatch = localReviews.find(r => sameTitle(r.title));
+  const match = ghMatch || localMatch;
+
+  if (match) {
+    loadReview(match.id, !ghMatch);
+  } else {
+    newReview();
+    set('f-title', game.name);
+    set('f-hours', Math.round(game.playtime_forever / 60));
+    set('f-cover', `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`);
+    syncId();
+    updatePreview();
+  }
+
   set('game-search', '');
   document.getElementById('game-results').className = '';
   document.getElementById('game-results').innerHTML = '';
-  syncId();
-  updatePreview();
   document.getElementById('f-summary').focus();
 }
 
