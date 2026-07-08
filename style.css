@@ -237,25 +237,6 @@ header {
   margin-top: 1.25rem;
 }
 
-/* ── Export button ── */
-
-.export-btn {
-  display: inline-block;
-  margin-top: 1.5rem;
-  padding: 0.7rem 1.4rem;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.95rem;
-  font-weight: 600;
-  transition: opacity 0.2s;
-}
-
-.export-btn:hover  { opacity: 0.85; }
-.export-btn.copied { background: var(--green); color: #0f2a1e; }
-
 /* ── Empty / error states ── */
 
 .state-msg {

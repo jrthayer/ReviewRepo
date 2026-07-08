@@ -298,6 +298,53 @@
     .steam-hr { border: none; border-top: 1px solid #3d5068; margin: 0.75rem 0; }
     .steam-empty { color: #8f98a0; font-style: italic; }
 
+    /* ── Site card preview (mirrors style.css) ── */
+    #site-preview {
+      --sp-surface: #16213e;
+      --sp-border:  #2a2a4a;
+      --sp-accent:  #e94560;
+      --sp-green:   #57cc99;
+      --sp-red:     #e63946;
+      --sp-text:    #eaeaea;
+      --sp-muted:   #8a8a9a;
+      max-width: 560px;
+      margin-bottom: 1.75rem;
+    }
+    #site-preview .card {
+      display: flex;
+      flex-direction: column;
+      background: var(--sp-surface);
+      border: 1px solid var(--sp-border);
+      border-radius: 8px;
+      overflow: hidden;
+      color: var(--sp-text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    #site-preview .card.expanded { border-color: var(--sp-accent); }
+    #site-preview .card-main { display: flex; gap: 1.25rem; padding: 1.25rem; align-items: center; }
+    #site-preview .card-cover { flex-shrink: 0; width: 120px; height: 80px; border-radius: 4px; overflow: hidden; background: var(--sp-border); }
+    #site-preview .card-cover img { width: 100%; height: 100%; object-fit: cover; }
+    #site-preview .card-info { flex: 1; min-width: 0; }
+    #site-preview .card-info h2 { font-size: 1.05rem; margin-bottom: 0.3rem; text-transform: none; letter-spacing: normal; color: var(--sp-text); }
+    #site-preview .card-chevron { color: var(--sp-muted); font-size: 0.7rem; flex-shrink: 0; padding-left: 0.5rem; }
+    #site-preview .badge { display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.55rem; border-radius: 4px; font-weight: 700; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    #site-preview .badge.yes { background: var(--sp-green); color: #0f2a1e; }
+    #site-preview .badge.no  { background: var(--sp-red); color: #fff; }
+    #site-preview .summary { color: var(--sp-muted); font-size: 0.88rem; margin-bottom: 0.35rem; }
+    #site-preview .meta { font-size: 0.78rem; color: var(--sp-muted); }
+    #site-preview .tag-list { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.45rem; }
+    #site-preview .tag-badge { background: var(--sp-border); color: var(--sp-muted); font-size: 0.7rem; padding: 0.12rem 0.5rem; border-radius: 999px; }
+    #site-preview .card-expanded { border-top: 1px solid var(--sp-border); padding: 1.5rem; }
+    #site-preview .expanded-body { line-height: 1.8; margin-bottom: 1rem; }
+    #site-preview .card-expanded section { margin-top: 1.25rem; }
+    #site-preview .card-expanded section h3 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--sp-accent); margin-bottom: 0.5rem; }
+    #site-preview .card-expanded ul { list-style: none; padding: 0; }
+    #site-preview .card-expanded ul li { padding: 0.2rem 0 0.2rem 1.2rem; position: relative; }
+    #site-preview .card-expanded ul li::before { content: '•'; position: absolute; left: 0; color: var(--sp-accent); }
+    #site-preview .card-expanded .verdict { border-top: 1px solid var(--sp-border); padding-top: 1.25rem; margin-top: 1.25rem; }
+
     @media (max-width: 840px) {
       body { overflow: auto; }
       #workspace { grid-template-columns: 1fr; height: auto; overflow: visible; }
@@ -452,7 +499,13 @@
 
   <!-- ── Right: preview ── -->
   <div id="right-panel">
-    <h2>Steam Preview</h2>
+    <h2>Site Card Preview</h2>
+    <div id="site-preview"></div>
+
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.9rem">
+      <h2 style="margin-bottom:0">Steam Preview</h2>
+      <button type="button" class="sm secondary" id="copy-steam-btn" onclick="copyForSteam()">Copy for Steam</button>
+    </div>
     <div id="steam-preview"></div>
   </div>
 
@@ -808,8 +861,60 @@ function onTagKeydown(e) {
 }
 
 // ── Preview ───────────────────────────────────────────────────────────────────
+let sitePreviewExpanded = true;
+
 function updatePreview() {
   const r = getForm();
+  renderSitePreview(r);
+  renderSteamPreview(r);
+}
+
+function renderSitePreview(r) {
+  const expanded = sitePreviewExpanded;
+  document.getElementById('site-preview').innerHTML = `
+    <div class="card ${expanded ? 'expanded' : ''}">
+      <div class="card-main">
+        <div class="card-cover">
+          ${r.coverImage ? `<img src="${esc(r.coverImage)}" alt="${esc(r.title)}">` : ''}
+        </div>
+        <div class="card-info">
+          <h2>${esc(r.title) || 'Untitled'}</h2>
+          <span class="badge ${r.recommended ? 'yes' : 'no'}">${r.recommended ? 'Recommended' : 'Not Recommended'}</span>
+          <p class="summary">${esc(r.summary)}</p>
+          <div class="meta">${r.hoursPlayed} hrs &middot; ${r.datePosted ? fmtDate(r.datePosted) : '—'}</div>
+          ${r.tags?.length ? `<div class="tag-list">${r.tags.map(t => `<span class="tag-badge">${esc(t)}</span>`).join('')}</div>` : ''}
+        </div>
+        <div class="card-chevron">${expanded ? '▲' : '▼'}</div>
+      </div>
+      ${expanded ? `
+        <div class="card-expanded">
+          ${r.body ? `<p class="expanded-body">${esc(r.body)}</p>` : ''}
+          ${r.pros.length ? `
+            <section>
+              <h3>Pros</h3>
+              <ul>${r.pros.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
+            </section>` : ''}
+          ${r.cons.length ? `
+            <section>
+              <h3>Cons</h3>
+              <ul>${r.cons.map(c => `<li>${esc(c)}</li>`).join('')}</ul>
+            </section>` : ''}
+          ${r.verdict ? `
+            <section class="verdict">
+              <h3>Verdict</h3>
+              <p>${esc(r.verdict)}</p>
+            </section>` : ''}
+        </div>
+      ` : ''}
+    </div>
+  `;
+  document.querySelector('#site-preview .card-main').onclick = () => {
+    sitePreviewExpanded = !sitePreviewExpanded;
+    renderSitePreview(getForm());
+  };
+}
+
+function renderSteamPreview(r) {
   const yes = r.recommended;
   const hasContent = r.summary || r.body || r.pros.length || r.cons.length || r.verdict;
 
@@ -839,6 +944,37 @@ function updatePreview() {
       </div>
     </div>
   `;
+}
+
+function copyForSteam() {
+  const r = getForm();
+  const lines = [];
+  lines.push(`[h1]${r.title}[/h1]`);
+  lines.push(`${r.recommended ? '✔ Recommended' : '✘ Not Recommended'} | ${r.hoursPlayed} hours played`);
+  lines.push('');
+  if (r.summary) { lines.push(`[i]${r.summary}[/i]`); lines.push(''); }
+  if (r.body)    { lines.push(r.body); lines.push(''); }
+  if (r.pros.length) {
+    lines.push('[b]Pros[/b]'); lines.push('[list]');
+    r.pros.forEach(p => lines.push(`[*] ${p}`));
+    lines.push('[/list]'); lines.push('');
+  }
+  if (r.cons.length) {
+    lines.push('[b]Cons[/b]'); lines.push('[list]');
+    r.cons.forEach(c => lines.push(`[*] ${c}`));
+    lines.push('[/list]'); lines.push('');
+  }
+  if (r.verdict) {
+    lines.push('[hr][/hr]');
+    lines.push('[b]Verdict[/b]');
+    lines.push(r.verdict);
+  }
+
+  navigator.clipboard.writeText(lines.join('\n')).then(() => {
+    const btn = document.getElementById('copy-steam-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy for Steam'; }, 2000);
+  });
 }
 
 function toggleKeyVis() {

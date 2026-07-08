@@ -81,7 +81,6 @@ function render() {
                 <h3>Verdict</h3>
                 <p>${escHtml(r.verdict)}</p>
               </section>` : ''}
-            <button class="export-btn" data-id="${escHtml(r.id)}">Copy for Steam</button>
           </div>
         ` : ''}
       </div>
@@ -89,52 +88,11 @@ function render() {
   }).join('');
 
   app.querySelectorAll('.card').forEach(card => {
-    card.addEventListener('click', e => {
-      if (e.target.closest('.export-btn')) return;
+    card.addEventListener('click', () => {
       const id = card.dataset.id;
       expandedId = expandedId === id ? null : id;
       render();
     });
-  });
-
-  app.querySelectorAll('.export-btn').forEach(btn => {
-    btn.addEventListener('click', handleExport);
-  });
-}
-
-function handleExport(e) {
-  e.stopPropagation();
-  const id = e.currentTarget.dataset.id;
-  const r = reviews.find(r => r.id === id);
-  if (!r) return;
-
-  const lines = [];
-  lines.push(`[h1]${r.title}[/h1]`);
-  lines.push(`${r.recommended ? '✔ Recommended' : '✘ Not Recommended'} | ${r.hoursPlayed} hours played`);
-  lines.push('');
-  if (r.summary) { lines.push(`[i]${r.summary}[/i]`); lines.push(''); }
-  if (r.body)    { lines.push(r.body); lines.push(''); }
-  if (r.pros?.length) {
-    lines.push('[b]Pros[/b]'); lines.push('[list]');
-    r.pros.forEach(p => lines.push(`[*] ${p}`));
-    lines.push('[/list]'); lines.push('');
-  }
-  if (r.cons?.length) {
-    lines.push('[b]Cons[/b]'); lines.push('[list]');
-    r.cons.forEach(c => lines.push(`[*] ${c}`));
-    lines.push('[/list]'); lines.push('');
-  }
-  if (r.verdict) {
-    lines.push('[hr][/hr]');
-    lines.push('[b]Verdict[/b]');
-    lines.push(r.verdict);
-  }
-
-  navigator.clipboard.writeText(lines.join('\n')).then(() => {
-    const btn = e.currentTarget;
-    btn.textContent = 'Copied!';
-    btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = 'Copy for Steam'; btn.classList.remove('copied'); }, 2000);
   });
 }
 
