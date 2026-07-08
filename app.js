@@ -77,7 +77,7 @@ function render() {
                 <div class="review-tabs">
                   ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${escHtml(t.id)}">${escHtml(t.name)}</button>`).join('')}
                 </div>` : ''}
-              <p class="expanded-body">${escHtml(activeTab.content)}</p>
+              <div class="expanded-body">${renderBBCode(activeTab.content)}</div>
             ` : ''}
             ${r.pros?.length ? `
               <section>
@@ -122,6 +122,25 @@ function escHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderBBCode(raw) {
+  if (!raw) return '';
+  let html = escHtml(raw);
+
+  html = html.replace(/\[list\]([\s\S]*?)\[\/list\]/gi, (_, inner) => {
+    const items = inner.split(/\[\*\]/).map(s => s.trim()).filter(Boolean);
+    return `<ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>`;
+  });
+
+  html = html
+    .replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '<strong>$1</strong>')
+    .replace(/\[i\]([\s\S]*?)\[\/i\]/gi, '<em>$1</em>')
+    .replace(/\[u\]([\s\S]*?)\[\/u\]/gi, '<u>$1</u>')
+    .replace(/\[strike\]([\s\S]*?)\[\/strike\]/gi, '<s>$1</s>')
+    .replace(/\[h1\]([\s\S]*?)\[\/h1\]/gi, '<span class="bb-h1">$1</span>');
+
+  return html.replace(/\n/g, '<br>');
 }
 
 function formatDate(str) {
