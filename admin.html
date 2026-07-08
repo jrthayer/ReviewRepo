@@ -555,12 +555,17 @@ async function pushFile(list, msg) {
 }
 
 // ── Review list ───────────────────────────────────────────────────────────────
+function cacheReviews(list) {
+  localStorage.setItem('gh_reviews_cache', JSON.stringify(list));
+}
+
 async function loadReviewList() {
   setSt('settings-status', 'Connecting...', false);
   try {
     const { reviews: loaded, sha } = await fetchFile();
     reviews = loaded;
     fileSha = sha;
+    cacheReviews(reviews);
     renderList();
     setSt('settings-status', `Connected — ${reviews.length} review(s).`, false);
     document.getElementById('settings').removeAttribute('open');
@@ -639,6 +644,7 @@ async function saveReview() {
     if (idx >= 0) latest[idx] = data; else latest.push(data);
     await pushFile(latest, `${idx >= 0 ? 'Update' : 'Add'} review: ${data.id}`);
     reviews = latest;
+    cacheReviews(reviews);
     editingId = data.id;
     // if this was a local review, remove it from local storage now that it's on GitHub
     if (isLocalReview) {
@@ -682,6 +688,7 @@ async function deleteReview() {
     fileSha = sha;
     await pushFile(latest.filter(r => r.id !== editingId), `Delete review: ${editingId}`);
     reviews = latest.filter(r => r.id !== editingId);
+    cacheReviews(reviews);
     newReview();
     setSt('save-status', 'Deleted.', false);
   } catch (e) {

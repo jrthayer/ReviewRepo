@@ -3,13 +3,7 @@ let expandedId = null;
 let activeTag = null;
 
 async function init() {
-  try {
-    const res = await fetch('data/reviews.json?v=' + Date.now());
-    reviews = await res.json();
-  } catch {
-    document.getElementById('app').innerHTML = '<p class="state-msg">Could not load reviews.json.</p>';
-    return;
-  }
+  reviews = JSON.parse(localStorage.getItem('gh_reviews_cache') || '[]');
 
   const local = JSON.parse(localStorage.getItem('local_reviews') || '[]');
   local.forEach(lr => {
