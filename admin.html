@@ -202,6 +202,7 @@
       cursor: pointer; line-height: 1.3; min-width: 1.9rem;
     }
     .format-toolbar button:hover { border-color: var(--accent); }
+    .format-toolbar-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 0.1rem; }
 
     .review-editor textarea {
       border: none; border-radius: 0; background: transparent;
@@ -330,9 +331,27 @@
     }
     .steam-body { padding: 13px 15px; line-height: 1.65; }
     .steam-body p { margin-bottom: 0.55rem; }
-    .steam-body ul { margin: 0 0 0.55rem 1.1rem; }
-    .steam-body ul li { margin-bottom: 0.15rem; }
+    .steam-body ul, .steam-body ol { margin: 0 0 0.55rem 1.1rem; }
+    .steam-body ul li, .steam-body ol li { margin-bottom: 0.15rem; }
     .steam-body .bb-h1 { display: block; font-size: 1.05rem; font-weight: 700; margin: 0.5rem 0 0.25rem; }
+    .steam-body .bb-h2 { display: block; font-size: 0.95rem; font-weight: 700; margin: 0.5rem 0 0.2rem; }
+    .steam-body .bb-h3 { display: block; font-size: 0.88rem; font-weight: 700; margin: 0.5rem 0 0.2rem; }
+    .steam-body .bb-quote {
+      border-left: 3px solid #3d5068; padding: 0.25rem 0 0.25rem 0.7rem;
+      margin: 0.4rem 0; color: #8f98a0; font-style: italic;
+    }
+    .steam-body .bb-code {
+      display: block; background: #1b2838; border: 1px solid #3d5068; border-radius: 3px;
+      padding: 0.5rem 0.65rem; margin: 0.4rem 0; font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.8rem; overflow-x: auto;
+    }
+    .steam-body .bb-spoiler { background: #3d5068; color: #3d5068; border-radius: 3px; padding: 0 0.2rem; cursor: pointer; }
+    .steam-body .bb-spoiler.revealed { background: transparent; color: inherit; }
+    .steam-body a { color: #66c0f4; text-decoration: underline; }
+    .steam-body table.bb-table { border-collapse: collapse; width: 100%; margin: 0.4rem 0; font-size: 0.78rem; }
+    .steam-body table.bb-table th, .steam-body table.bb-table td { border: 1px solid #3d5068; padding: 0.3rem 0.5rem; text-align: left; }
+    .steam-body table.bb-table th { background: #1e3a52; }
+    .steam-body .bb-hr { border: none; border-top: 1px solid #3d5068; margin: 0.6rem 0; }
     .steam-empty { color: #8f98a0; font-style: italic; }
 
     /* ── Site card preview (mirrors style.css) ── */
@@ -386,6 +405,26 @@
     #site-preview .expanded-body ul li { padding: 0.2rem 0 0.2rem 1.2rem; position: relative; }
     #site-preview .expanded-body ul li::before { content: '•'; position: absolute; left: 0; color: var(--sp-accent); }
     #site-preview .expanded-body .bb-h1 { display: block; font-size: 1.1rem; font-weight: 700; margin: 0.5rem 0 0.25rem; }
+    #site-preview .expanded-body .bb-h2 { display: block; font-size: 1rem; font-weight: 700; margin: 0.5rem 0 0.25rem; }
+    #site-preview .expanded-body .bb-h3 { display: block; font-size: 0.92rem; font-weight: 700; margin: 0.5rem 0 0.25rem; }
+    #site-preview .expanded-body ol { margin: 0 0 0.5rem 1.2rem; }
+    #site-preview .expanded-body ol li { padding: 0.15rem 0; }
+    #site-preview .expanded-body .bb-quote {
+      border-left: 3px solid var(--sp-accent); padding: 0.3rem 0 0.3rem 0.85rem;
+      margin: 0.5rem 0; color: var(--sp-muted); font-style: italic;
+    }
+    #site-preview .expanded-body .bb-code {
+      display: block; background: var(--sp-bg); border: 1px solid var(--sp-border); border-radius: 4px;
+      padding: 0.6rem 0.75rem; margin: 0.5rem 0; font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.85rem; overflow-x: auto;
+    }
+    #site-preview .expanded-body .bb-spoiler { background: var(--sp-border); color: var(--sp-border); border-radius: 3px; padding: 0 0.2rem; cursor: pointer; }
+    #site-preview .expanded-body .bb-spoiler.revealed { background: transparent; color: inherit; }
+    #site-preview .expanded-body a { color: var(--sp-accent); text-decoration: underline; }
+    #site-preview .expanded-body table.bb-table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; font-size: 0.85rem; }
+    #site-preview .expanded-body table.bb-table th, #site-preview .expanded-body table.bb-table td { border: 1px solid var(--sp-border); padding: 0.35rem 0.55rem; text-align: left; }
+    #site-preview .expanded-body table.bb-table th { background: var(--sp-bg); }
+    #site-preview .expanded-body .bb-hr { border: none; border-top: 1px solid var(--sp-border); margin: 0.75rem 0; }
 
     @media (max-width: 840px) {
       body { overflow: auto; }
@@ -518,8 +557,21 @@
             <button type="button" onclick="applyFormat('italic')" title="Italic"><i>I</i></button>
             <button type="button" onclick="applyFormat('underline')" title="Underline"><u>U</u></button>
             <button type="button" onclick="applyFormat('strike')" title="Strikethrough"><s>S</s></button>
-            <button type="button" onclick="applyFormat('header')" title="Header">H1</button>
+            <span class="format-toolbar-sep"></span>
+            <button type="button" onclick="applyFormat('header1')" title="Header 1">H1</button>
+            <button type="button" onclick="applyFormat('header2')" title="Header 2">H2</button>
+            <button type="button" onclick="applyFormat('header3')" title="Header 3">H3</button>
+            <span class="format-toolbar-sep"></span>
             <button type="button" onclick="applyFormat('list')" title="Bulleted list">&bull; List</button>
+            <button type="button" onclick="applyFormat('olist')" title="Numbered list">1. List</button>
+            <span class="format-toolbar-sep"></span>
+            <button type="button" onclick="applyFormat('quote')" title="Quote">&ldquo;Quote&rdquo;</button>
+            <button type="button" onclick="applyFormat('code')" title="Code block">&lt;/&gt;</button>
+            <button type="button" onclick="applyFormat('spoiler')" title="Spoiler">Spoiler</button>
+            <button type="button" onclick="applyFormat('url')" title="Insert link">Link</button>
+            <button type="button" onclick="applyFormat('table')" title="Insert table">Table</button>
+            <button type="button" onclick="applyFormat('hr')" title="Horizontal rule">&mdash;</button>
+            <button type="button" onclick="applyFormat('noparse')" title="Raw text (ignore formatting)">Raw</button>
           </div>
           <textarea id="f-review-text" rows="5" placeholder="Main review text..." oninput="onReviewTextInput()"></textarea>
         </div>
@@ -796,7 +848,12 @@ const FORMAT_TAGS = {
   italic:    ['[i]', '[/i]'],
   underline: ['[u]', '[/u]'],
   strike:    ['[strike]', '[/strike]'],
-  header:    ['[h1]', '[/h1]'],
+  header1:   ['[h1]', '[/h1]'],
+  header2:   ['[h2]', '[/h2]'],
+  header3:   ['[h3]', '[/h3]'],
+  quote:     ['[quote]', '[/quote]'],
+  code:      ['[code]', '[/code]'],
+  spoiler:   ['[spoiler]', '[/spoiler]'],
 };
 
 function applyFormat(type) {
@@ -808,11 +865,30 @@ function applyFormat(type) {
 
   let insertText, selectFrom, selectTo;
 
-  if (type === 'list') {
+  if (type === 'list' || type === 'olist') {
     const items = (selected || 'List item').split('\n').map(s => s.trim()).filter(Boolean);
-    insertText = `[list]\n${items.map(i => `[*] ${i}`).join('\n')}\n[/list]`;
+    insertText = `[${type}]\n${items.map(i => `[*] ${i}`).join('\n')}\n[/${type}]`;
     selectFrom = start;
     selectTo = start + insertText.length;
+  } else if (type === 'url') {
+    const url = prompt('Link URL (must start with http:// or https://):', 'https://');
+    if (!url) return;
+    const text = selected || 'link text';
+    insertText = `[url=${url}]${text}[/url]`;
+    selectFrom = start + `[url=${url}]`.length;
+    selectTo = selectFrom + text.length;
+  } else if (type === 'table') {
+    insertText = '[table]\n[tr]\n[th]Header 1[/th]\n[th]Header 2[/th]\n[/tr]\n[tr]\n[td]Cell 1[/td]\n[td]Cell 2[/td]\n[/tr]\n[/table]';
+    selectFrom = start;
+    selectTo = start + insertText.length;
+  } else if (type === 'hr') {
+    insertText = '\n[hr][/hr]\n';
+    selectFrom = selectTo = start + insertText.length;
+  } else if (type === 'noparse') {
+    const inner = selected || 'text';
+    insertText = `[noparse]${inner}[/noparse]`;
+    selectFrom = start + '[noparse]'.length;
+    selectTo = selectFrom + inner.length;
   } else {
     const [open, close] = FORMAT_TAGS[type];
     const inner = selected || 'text';
@@ -831,19 +907,54 @@ function renderBBCode(raw) {
   if (!raw) return '';
   let html = esc(raw);
 
+  const noparseBlocks = [];
+  html = html.replace(/\[noparse\]([\s\S]*?)\[\/noparse\]/gi, (_, inner) => {
+    const token = `NP${noparseBlocks.length}`;
+    noparseBlocks.push(inner.replace(/\n/g, '<br>'));
+    return token;
+  });
+
+  html = html.replace(/\[table\]([\s\S]*?)\[\/table\]/gi, (_, tableInner) => {
+    const rows = [...tableInner.matchAll(/\[tr\]([\s\S]*?)\[\/tr\]/gi)].map(m => {
+      const cells = [...m[1].matchAll(/\[(th|td)\]([\s\S]*?)\[\/\1\]/gi)]
+        .map(c => `<${c[1]}>${c[2].trim()}</${c[1]}>`).join('');
+      return `<tr>${cells}</tr>`;
+    }).join('');
+    return `<table class="bb-table">${rows}</table>`;
+  });
+
   html = html.replace(/\[list\]([\s\S]*?)\[\/list\]/gi, (_, inner) => {
     const items = inner.split(/\[\*\]/).map(s => s.trim()).filter(Boolean);
     return `<ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>`;
   });
+  html = html.replace(/\[olist\]([\s\S]*?)\[\/olist\]/gi, (_, inner) => {
+    const items = inner.split(/\[\*\]/).map(s => s.trim()).filter(Boolean);
+    return `<ol>${items.map(i => `<li>${i}</li>`).join('')}</ol>`;
+  });
 
   html = html
+    .replace(/\[quote\]([\s\S]*?)\[\/quote\]/gi, '<blockquote class="bb-quote">$1</blockquote>')
+    .replace(/\[code\]([\s\S]*?)\[\/code\]/gi, '<pre class="bb-code"><code>$1</code></pre>')
+    .replace(/\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi, '<span class="bb-spoiler" onclick="this.classList.add(\'revealed\')">$1</span>')
     .replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '<strong>$1</strong>')
     .replace(/\[i\]([\s\S]*?)\[\/i\]/gi, '<em>$1</em>')
     .replace(/\[u\]([\s\S]*?)\[\/u\]/gi, '<u>$1</u>')
     .replace(/\[strike\]([\s\S]*?)\[\/strike\]/gi, '<s>$1</s>')
-    .replace(/\[h1\]([\s\S]*?)\[\/h1\]/gi, '<span class="bb-h1">$1</span>');
+    .replace(/\[h1\]([\s\S]*?)\[\/h1\]/gi, '<span class="bb-h1">$1</span>')
+    .replace(/\[h2\]([\s\S]*?)\[\/h2\]/gi, '<span class="bb-h2">$1</span>')
+    .replace(/\[h3\]([\s\S]*?)\[\/h3\]/gi, '<span class="bb-h3">$1</span>');
 
-  return html.replace(/\n/g, '<br>');
+  html = html.replace(/\[url=(.+?)\]([\s\S]*?)\[\/url\]/gi, (_, url, text) => {
+    return /^https?:\/\//i.test(url)
+      ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`
+      : text;
+  });
+
+  html = html.replace(/\[hr\]\[\/hr\]/gi, '<hr class="bb-hr">');
+  html = html.replace(/\n/g, '<br>');
+  html = html.replace(/NP(\d+)/g, (_, i) => noparseBlocks[Number(i)]);
+
+  return html;
 }
 
 function syncActiveTabContent() {

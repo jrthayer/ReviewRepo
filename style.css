@@ -209,6 +209,90 @@ header {
   margin: 0.5rem 0 0.25rem;
 }
 
+.expanded-body .bb-h2 {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.expanded-body .bb-h3 {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.expanded-body ol {
+  margin: 0 0 0.55rem 1.2rem;
+}
+
+.expanded-body ol li {
+  padding: 0.15rem 0;
+}
+
+.expanded-body .bb-quote {
+  border-left: 3px solid var(--accent);
+  padding: 0.3rem 0 0.3rem 0.85rem;
+  margin: 0.5rem 0;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.expanded-body .bb-code {
+  display: block;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.6rem 0.75rem;
+  margin: 0.5rem 0;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 0.85rem;
+  overflow-x: auto;
+}
+
+.expanded-body .bb-spoiler {
+  background: var(--border);
+  color: var(--border);
+  border-radius: 3px;
+  padding: 0 0.2rem;
+  cursor: pointer;
+}
+
+.expanded-body .bb-spoiler.revealed {
+  background: transparent;
+  color: inherit;
+}
+
+.expanded-body a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.expanded-body table.bb-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+}
+
+.expanded-body table.bb-table th,
+.expanded-body table.bb-table td {
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+
+.expanded-body table.bb-table th {
+  background: var(--surface);
+}
+
+.expanded-body .bb-hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.75rem 0;
+}
+
 /* ── Review tabs ── */
 
 .review-tabs {

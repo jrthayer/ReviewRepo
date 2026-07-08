@@ -128,19 +128,54 @@ function renderBBCode(raw) {
   if (!raw) return '';
   let html = escHtml(raw);
 
+  const noparseBlocks = [];
+  html = html.replace(/\[noparse\]([\s\S]*?)\[\/noparse\]/gi, (_, inner) => {
+    const token = `NP${noparseBlocks.length}`;
+    noparseBlocks.push(inner.replace(/\n/g, '<br>'));
+    return token;
+  });
+
+  html = html.replace(/\[table\]([\s\S]*?)\[\/table\]/gi, (_, tableInner) => {
+    const rows = [...tableInner.matchAll(/\[tr\]([\s\S]*?)\[\/tr\]/gi)].map(m => {
+      const cells = [...m[1].matchAll(/\[(th|td)\]([\s\S]*?)\[\/\1\]/gi)]
+        .map(c => `<${c[1]}>${c[2].trim()}</${c[1]}>`).join('');
+      return `<tr>${cells}</tr>`;
+    }).join('');
+    return `<table class="bb-table">${rows}</table>`;
+  });
+
   html = html.replace(/\[list\]([\s\S]*?)\[\/list\]/gi, (_, inner) => {
     const items = inner.split(/\[\*\]/).map(s => s.trim()).filter(Boolean);
     return `<ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>`;
   });
+  html = html.replace(/\[olist\]([\s\S]*?)\[\/olist\]/gi, (_, inner) => {
+    const items = inner.split(/\[\*\]/).map(s => s.trim()).filter(Boolean);
+    return `<ol>${items.map(i => `<li>${i}</li>`).join('')}</ol>`;
+  });
 
   html = html
+    .replace(/\[quote\]([\s\S]*?)\[\/quote\]/gi, '<blockquote class="bb-quote">$1</blockquote>')
+    .replace(/\[code\]([\s\S]*?)\[\/code\]/gi, '<pre class="bb-code"><code>$1</code></pre>')
+    .replace(/\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi, '<span class="bb-spoiler" onclick="this.classList.add(\'revealed\')">$1</span>')
     .replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '<strong>$1</strong>')
     .replace(/\[i\]([\s\S]*?)\[\/i\]/gi, '<em>$1</em>')
     .replace(/\[u\]([\s\S]*?)\[\/u\]/gi, '<u>$1</u>')
     .replace(/\[strike\]([\s\S]*?)\[\/strike\]/gi, '<s>$1</s>')
-    .replace(/\[h1\]([\s\S]*?)\[\/h1\]/gi, '<span class="bb-h1">$1</span>');
+    .replace(/\[h1\]([\s\S]*?)\[\/h1\]/gi, '<span class="bb-h1">$1</span>')
+    .replace(/\[h2\]([\s\S]*?)\[\/h2\]/gi, '<span class="bb-h2">$1</span>')
+    .replace(/\[h3\]([\s\S]*?)\[\/h3\]/gi, '<span class="bb-h3">$1</span>');
 
-  return html.replace(/\n/g, '<br>');
+  html = html.replace(/\[url=(.+?)\]([\s\S]*?)\[\/url\]/gi, (_, url, text) => {
+    return /^https?:\/\//i.test(url)
+      ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`
+      : text;
+  });
+
+  html = html.replace(/\[hr\]\[\/hr\]/gi, '<hr class="bb-hr">');
+  html = html.replace(/\n/g, '<br>');
+  html = html.replace(/NP(\d+)/g, (_, i) => noparseBlocks[Number(i)]);
+
+  return html;
 }
 
 function formatDate(str) {
