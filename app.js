@@ -4,12 +4,6 @@ let activeTag = null;
 
 async function init() {
   reviews = JSON.parse(localStorage.getItem('gh_reviews_cache') || '[]');
-
-  const local = JSON.parse(localStorage.getItem('local_reviews') || '[]');
-  local.forEach(lr => {
-    if (!reviews.find(r => r.id === lr.id)) reviews.push(lr);
-  });
-
   render();
 }
 

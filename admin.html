@@ -252,20 +252,6 @@
     }
     .key-toggle:hover { color: var(--text); opacity: 1; }
 
-    /* ── Local review indicators ── */
-    .local-warning {
-      background: #2e2500; border: 1px solid #6b5000;
-      border-radius: 4px; padding: 0.45rem 0.7rem;
-      font-size: 0.78rem; color: #f0c040;
-    }
-    .local-badge {
-      background: #6b5000; color: #f0c040;
-      font-size: 0.62rem; padding: 0.1rem 0.3rem;
-      border-radius: 3px; font-weight: 700;
-      margin-left: 0.35rem; vertical-align: middle;
-    }
-    .r-sep { border: none; border-top: 1px solid var(--border); margin: 0.25rem 0; }
-
     /* ── Preview panel ── */
     #right-panel h2 {
       font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em;
@@ -390,9 +376,6 @@
     </div>
 
     <div id="form-heading">New Review</div>
-    <div id="local-warning" class="local-warning" style="display:none">
-      ⚠ This review is saved locally only — it will not appear on your site until you click <strong>Save to GitHub</strong>.
-    </div>
 
     <form id="review-form" onsubmit="return false">
 
@@ -459,8 +442,7 @@
       </label>
 
       <div id="save-row">
-        <button type="button" id="save-btn" onclick="saveReview()">Save to GitHub</button>
-        <button type="button" id="local-btn" class="secondary" onclick="saveLocally()">Save Locally</button>
+        <button type="button" id="save-btn" onclick="saveReview()">Save</button>
         <button type="button" id="delete-btn" class="danger" style="display:none" onclick="deleteReview()">Delete</button>
         <span id="save-status" class="status"></span>
       </div>
@@ -479,10 +461,8 @@
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
 let reviews      = [];
-let localReviews = [];
 let fileSha      = null;
 let editingId    = null;
-let isLocalReview = false;
 let steamLibrary  = [];
 let currentTags   = [];
 let tagHlIndex    = -1;
@@ -576,54 +556,36 @@ async function loadReviewList() {
 
 function renderList() {
   const el = document.getElementById('review-list');
-  const hasGH    = reviews.length > 0;
-  const hasLocal  = localReviews.length > 0;
 
-  if (!hasGH && !hasLocal) {
+  if (!reviews.length) {
     el.innerHTML = '<p class="hint" style="padding:0.5rem 0.6rem">No reviews yet.</p>';
     return;
   }
 
-  let html = '';
-  if (hasGH) {
-    html += reviews.map(r => `
-      <div class="r-item ${editingId === r.id && !isLocalReview ? 'active' : ''}">
-        <button onclick="loadReview('${r.id}', false)">${esc(r.title)}</button>
-      </div>`).join('');
-  }
-  if (hasLocal) {
-    if (hasGH) html += '<hr class="r-sep">';
-    html += localReviews.map(r => `
-      <div class="r-item ${editingId === r.id && isLocalReview ? 'active' : ''}">
-        <button onclick="loadReview('${r.id}', true)">${esc(r.title)}<span class="local-badge">LOCAL</span></button>
-      </div>`).join('');
-  }
-  el.innerHTML = html;
+  el.innerHTML = reviews.map(r => `
+    <div class="r-item ${editingId === r.id ? 'active' : ''}">
+      <button onclick="loadReview('${r.id}')">${esc(r.title)}</button>
+    </div>`).join('');
 }
 
 // ── Form actions ──────────────────────────────────────────────────────────────
-function loadReview(id, isLocal = false) {
-  const source = isLocal ? localReviews : reviews;
-  const r = source.find(r => r.id === id);
+function loadReview(id) {
+  const r = reviews.find(r => r.id === id);
   if (!r) return;
   editingId = id;
-  isLocalReview = isLocal;
   setForm(r);
   document.getElementById('form-heading').textContent = 'Edit Review';
   document.getElementById('delete-btn').style.display = 'inline-block';
-  updateWarning();
   renderList();
   updatePreview();
 }
 
 function newReview() {
   editingId = null;
-  isLocalReview = false;
   clearForm();
   document.getElementById('form-heading').textContent = 'New Review';
   document.getElementById('delete-btn').style.display = 'none';
   setSt('save-status', '', false);
-  updateWarning();
   renderList();
   updatePreview();
 }
@@ -646,17 +608,10 @@ async function saveReview() {
     reviews = latest;
     cacheReviews(reviews);
     editingId = data.id;
-    // if this was a local review, remove it from local storage now that it's on GitHub
-    if (isLocalReview) {
-      localReviews = localReviews.filter(r => r.id !== data.id);
-      localStorage.setItem('local_reviews', JSON.stringify(localReviews));
-      isLocalReview = false;
-    }
     document.getElementById('form-heading').textContent = 'Edit Review';
     document.getElementById('delete-btn').style.display = 'inline-block';
-    updateWarning();
     renderList();
-    setSt('save-status', 'Saved to GitHub!', false);
+    setSt('save-status', 'Saved!', false);
   } catch (e) {
     setSt('save-status', e.message, true);
   } finally {
@@ -666,16 +621,6 @@ async function saveReview() {
 
 async function deleteReview() {
   if (!editingId) return;
-
-  if (isLocalReview) {
-    const title = localReviews.find(r => r.id === editingId)?.title || editingId;
-    if (!confirm(`Delete local review "${title}"?`)) return;
-    localReviews = localReviews.filter(r => r.id !== editingId);
-    localStorage.setItem('local_reviews', JSON.stringify(localReviews));
-    newReview();
-    setSt('save-status', 'Local review deleted.', false);
-    return;
-  }
 
   const title = reviews.find(r => r.id === editingId)?.title || editingId;
   if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
@@ -776,7 +721,7 @@ function addItem(which, value = '') {
 // ── Tags ──────────────────────────────────────────────────────────────────────
 function getAllTags() {
   const set = new Set();
-  [...reviews, ...localReviews].forEach(r => (r.tags || []).forEach(t => set.add(t)));
+  reviews.forEach(r => (r.tags || []).forEach(t => set.add(t)));
   return [...set].sort((a, b) => a.localeCompare(b));
 }
 
@@ -896,26 +841,6 @@ function updatePreview() {
   `;
 }
 
-// ── Local save ────────────────────────────────────────────────────────────────
-function saveLocally() {
-  const data = getForm();
-  if (!data.title || !data.id) { setSt('save-status', 'Title and ID are required.', true); return; }
-  const idx = localReviews.findIndex(r => r.id === data.id);
-  if (idx >= 0) localReviews[idx] = data; else localReviews.push(data);
-  localStorage.setItem('local_reviews', JSON.stringify(localReviews));
-  editingId = data.id;
-  isLocalReview = true;
-  document.getElementById('form-heading').textContent = 'Edit Review';
-  document.getElementById('delete-btn').style.display = 'inline-block';
-  updateWarning();
-  renderList();
-  setSt('save-status', 'Saved locally.', false);
-}
-
-function updateWarning() {
-  document.getElementById('local-warning').style.display = isLocalReview ? 'block' : 'none';
-}
-
 function toggleKeyVis() {
   const input = document.getElementById('steam-key');
   const btn   = document.getElementById('key-toggle');
@@ -996,12 +921,10 @@ function selectGame(appid) {
   if (!game) return;
 
   const sameTitle = t => t.trim().toLowerCase() === game.name.trim().toLowerCase();
-  const ghMatch = reviews.find(r => sameTitle(r.title));
-  const localMatch = localReviews.find(r => sameTitle(r.title));
-  const match = ghMatch || localMatch;
+  const match = reviews.find(r => sameTitle(r.title));
 
   if (match) {
-    loadReview(match.id, !ghMatch);
+    loadReview(match.id);
   } else {
     newReview();
     set('f-title', game.name);
@@ -1065,7 +988,6 @@ function b64decode(b64) {
   if (steamKey) set('steam-key', steamKey);
   if (steamId)  set('steam-id',  steamId);
 
-  localReviews = JSON.parse(localStorage.getItem('local_reviews') || '[]');
   set('f-date', today());
   updatePreview();
   renderList();
