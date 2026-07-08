@@ -165,18 +165,27 @@
 
     .dyn-section > label { margin-bottom: 0.25rem; }
 
-    .review-tabs { display: flex; gap: 0.25rem; }
+    .review-tabs { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
     .review-tab {
+      display: flex; align-items: center; gap: 0.3rem;
       background: var(--input-bg); color: var(--muted); border: 1px solid var(--border);
-      border-bottom: none; border-radius: 4px 4px 0 0; padding: 0.35rem 0.75rem;
+      border-bottom: none; border-radius: 4px 4px 0 0; padding: 0.35rem 0.55rem 0.35rem 0.75rem;
       font-size: 0.78rem; font-weight: 600; cursor: pointer; position: relative; top: 1px;
     }
     .review-tab.active { background: var(--panel); color: var(--text); border-color: var(--accent); }
+    .review-tab-label { cursor: text; }
+    .review-tab-rename-input {
+      background: transparent; border: none; border-bottom: 1px dashed var(--muted);
+      color: inherit; font: inherit; padding: 0; width: 6.5rem;
+    }
+    .review-tab-rename-input:focus { outline: none; border-color: var(--accent); }
+    .review-tab-close {
+      background: none; color: var(--muted); padding: 0 0.15rem;
+      font-size: 0.85rem; line-height: 1; border-radius: 50%;
+    }
+    .review-tab-close:hover { color: var(--text); }
+    .review-tab-add { padding: 0.35rem 0.65rem; font-weight: 700; }
     .review-tab-panel { border-top-left-radius: 0; }
-
-    .list-row { display: flex; gap: 0.35rem; margin-bottom: 0.35rem; }
-    .list-row input { flex: 1; }
-    .list-row button { background: var(--border); color: var(--text); flex-shrink: 0; padding: 0.3rem 0.55rem; }
 
     #save-row { display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap; padding-top: 0.25rem; }
     .status { font-size: 0.78rem; }
@@ -299,13 +308,6 @@
     }
     .steam-body { padding: 13px 15px; line-height: 1.65; }
     .steam-body p { margin-bottom: 0.55rem; }
-    .steam-body h4 {
-      font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
-      color: #c6d4df; margin: 0.75rem 0 0.25rem;
-    }
-    .steam-body ul { margin: 0 0 0.55rem 1.1rem; }
-    .steam-body ul li { margin-bottom: 0.15rem; }
-    .steam-hr { border: none; border-top: 1px solid #3d5068; margin: 0.75rem 0; }
     .steam-empty { color: #8f98a0; font-style: italic; }
 
     /* ── Site card preview (mirrors style.css) ── */
@@ -355,12 +357,6 @@
     }
     #site-preview .review-tab.active { background: var(--sp-surface); color: var(--sp-text); border-color: var(--sp-accent); }
     #site-preview .expanded-body { line-height: 1.8; margin-bottom: 1rem; }
-    #site-preview .card-expanded section { margin-top: 1.25rem; }
-    #site-preview .card-expanded section h3 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--sp-accent); margin-bottom: 0.5rem; }
-    #site-preview .card-expanded ul { list-style: none; padding: 0; }
-    #site-preview .card-expanded ul li { padding: 0.2rem 0 0.2rem 1.2rem; position: relative; }
-    #site-preview .card-expanded ul li::before { content: '•'; position: absolute; left: 0; color: var(--sp-accent); }
-    #site-preview .card-expanded .verdict { border-top: 1px solid var(--sp-border); padding-top: 1.25rem; margin-top: 1.25rem; }
 
     @media (max-width: 840px) {
       body { overflow: auto; }
@@ -486,29 +482,9 @@
       </label>
 
       <div class="dyn-section">
-        <div class="review-tabs">
-          <button type="button" class="review-tab active" data-tab="steam" onclick="switchReviewTab('steam')">Steam Review</button>
-          <button type="button" class="review-tab" data-tab="tab2" onclick="switchReviewTab('tab2')">Tab 2</button>
-        </div>
-        <textarea id="f-body" class="review-tab-panel" rows="5" placeholder="Main review text..." oninput="updatePreview()"></textarea>
-        <textarea id="f-tab2" class="review-tab-panel" rows="5" placeholder="Main review text..." oninput="updatePreview()" style="display:none"></textarea>
+        <div class="review-tabs" id="review-tabs"></div>
+        <textarea id="f-review-text" class="review-tab-panel" rows="5" placeholder="Main review text..." oninput="onReviewTextInput()"></textarea>
       </div>
-
-      <div class="dyn-section">
-        <label>Pros</label>
-        <div id="pros-list"></div>
-        <button type="button" class="secondary sm" onclick="addItem('pros')">+ Add Pro</button>
-      </div>
-
-      <div class="dyn-section">
-        <label>Cons</label>
-        <div id="cons-list"></div>
-        <button type="button" class="secondary sm" onclick="addItem('cons')">+ Add Con</button>
-      </div>
-
-      <label>Verdict
-        <textarea id="f-verdict" rows="3" placeholder="Final verdict..." oninput="updatePreview()"></textarea>
-      </label>
 
       <div id="save-row">
         <button type="button" id="save-btn" onclick="saveReview()">Save</button>
@@ -541,6 +517,9 @@ let editingId    = null;
 let steamLibrary  = [];
 let currentTags   = [];
 let tagHlIndex    = -1;
+let steamBody     = '';
+let extraTabs     = []; // [{ id, name, content }]
+let activeReviewTab = 'steam';
 
 // ── Config ───────────────────────────────────────────────────────────────────
 function getCfg() {
@@ -728,11 +707,8 @@ function getForm() {
     coverImage:  v('f-cover'),
     hoursPlayed: Number(v('f-hours')) || 0,
     datePosted:  v('f-date'),
-    body:        v('f-body'),
-    tab2:        v('f-tab2'),
-    pros:        listItems('pros'),
-    cons:        listItems('cons'),
-    verdict:     v('f-verdict'),
+    body:        syncActiveTabContent().steamBody,
+    tabs:        extraTabs.map(({ id, name, content }) => ({ id, name, content })),
     tags:        [...currentTags],
   };
 }
@@ -744,64 +720,130 @@ function setForm(r) {
   set('f-cover',   r.coverImage  || '');
   set('f-hours',   r.hoursPlayed ?? 0);
   set('f-date',    r.datePosted  || '');
-  set('f-body',    r.body        || '');
-  set('f-tab2',    r.tab2        || '');
-  set('f-verdict', r.verdict     || '');
+  steamBody = r.body || '';
+  extraTabs = (r.tabs || []).map(t => ({ ...t }));
   const radio = document.querySelector(`input[name="recommended"][value="${r.recommended}"]`);
   if (radio) radio.checked = true;
-  setListItems('pros', r.pros || []);
-  setListItems('cons', r.cons || []);
   currentTags = [...(r.tags || [])];
   renderTags();
-  switchReviewTab('steam');
+  activeReviewTab = 'steam';
+  set('f-review-text', steamBody);
+  renderReviewTabs();
 }
 
 function clearForm() {
-  ['f-title','f-id','f-summary','f-cover','f-body','f-tab2','f-verdict'].forEach(id => set(id, ''));
+  ['f-title','f-id','f-summary','f-cover'].forEach(id => set(id, ''));
   set('f-hours', '0');
   set('f-date', today());
   document.querySelector('input[name="recommended"][value="true"]').checked = true;
-  setListItems('pros', []);
-  setListItems('cons', []);
+  steamBody = '';
+  extraTabs = [];
   currentTags = [];
   renderTags();
-  switchReviewTab('steam');
+  activeReviewTab = 'steam';
+  set('f-review-text', '');
+  renderReviewTabs();
 }
 
-// ── Review tabs (placeholder: "tab2" purpose/name TBD) ─────────────────────────
-function switchReviewTab(tab) {
-  document.querySelectorAll('.review-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
-  document.getElementById('f-body').style.display = tab === 'steam' ? 'block' : 'none';
-  document.getElementById('f-tab2').style.display = tab === 'tab2'  ? 'block' : 'none';
+// ── Review tabs ───────────────────────────────────────────────────────────────
+function onReviewTextInput() {
+  syncActiveTabContent();
+  updatePreview();
 }
 
-// ── Dynamic lists ─────────────────────────────────────────────────────────────
-function listItems(which) {
-  return [...document.querySelectorAll(`#${which}-list .list-row input`)]
-    .map(i => i.value.trim()).filter(Boolean);
+function syncActiveTabContent() {
+  const val = document.getElementById('f-review-text').value;
+  if (activeReviewTab === 'steam') {
+    steamBody = val;
+  } else {
+    const tab = extraTabs.find(t => t.id === activeReviewTab);
+    if (tab) tab.content = val;
+  }
+  return { steamBody };
 }
 
-function setListItems(which, items) {
-  document.getElementById(`${which}-list`).innerHTML = '';
-  items.forEach(val => addItem(which, val));
+function switchReviewTab(id) {
+  syncActiveTabContent();
+  activeReviewTab = id;
+  const tab = extraTabs.find(t => t.id === id);
+  set('f-review-text', id === 'steam' ? steamBody : (tab?.content || ''));
+  renderReviewTabs();
 }
 
-function addItem(which, value = '') {
-  const container = document.getElementById(`${which}-list`);
-  const row = document.createElement('div');
-  row.className = 'list-row';
+function addReviewTab() {
+  syncActiveTabContent();
+  const id = `tab-${Date.now()}`;
+  extraTabs.push({ id, name: `Tab ${extraTabs.length + 2}`, content: '' });
+  activeReviewTab = id;
+  set('f-review-text', '');
+  renderReviewTabs();
+  updatePreview();
+}
+
+function deleteReviewTab(e, id) {
+  e.stopPropagation();
+  const idx = extraTabs.findIndex(t => t.id === id);
+  if (idx === -1) return;
+  extraTabs.splice(idx, 1);
+  if (activeReviewTab === id) {
+    activeReviewTab = 'steam';
+    set('f-review-text', steamBody);
+  }
+  renderReviewTabs();
+  updatePreview();
+}
+
+function startRenameTab(e, id) {
+  e.stopPropagation();
+  const tab = extraTabs.find(t => t.id === id);
+  if (!tab) return;
+  const label = e.target.closest('.review-tab-label');
+  if (!label) return;
   const input = document.createElement('input');
   input.type = 'text';
-  input.value = value;
-  input.placeholder = 'Enter item...';
-  input.oninput = updatePreview;
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.textContent = '×';
-  btn.onclick = () => { row.remove(); updatePreview(); };
-  row.append(input, btn);
-  container.appendChild(row);
-  if (!value) input.focus();
+  input.value = tab.name;
+  input.className = 'review-tab-rename-input';
+  input.onclick = ev => ev.stopPropagation();
+  input.onkeydown = ev => {
+    if (ev.key === 'Enter') input.blur();
+    if (ev.key === 'Escape') { input.value = tab.name; input.blur(); }
+  };
+  input.onblur = () => {
+    tab.name = input.value.trim() || tab.name;
+    renderReviewTabs();
+  };
+  label.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+function renderReviewTabs() {
+  const el = document.getElementById('review-tabs');
+  const extraHtml = extraTabs.map(t => `
+    <button type="button" class="review-tab ${activeReviewTab === t.id ? 'active' : ''}" data-tab-id="${esc(t.id)}">
+      <span class="review-tab-label">${esc(t.name)}</span>
+      <span class="review-tab-close" onclick="deleteReviewTab(event, '${t.id}')">&times;</span>
+    </button>
+  `).join('');
+
+  el.innerHTML = `
+    <button type="button" class="review-tab ${activeReviewTab === 'steam' ? 'active' : ''}" data-tab-id="steam">Steam Review</button>
+    ${extraHtml}
+    <button type="button" class="review-tab review-tab-add" onclick="addReviewTab()">+</button>
+  `;
+
+  el.querySelectorAll('.review-tab[data-tab-id]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      if (e.target.closest('.review-tab-close') || e.target.closest('.review-tab-rename-input')) return;
+      const id = btn.dataset.tabId;
+      const labelClicked = e.target.closest('.review-tab-label');
+      if (labelClicked && id !== 'steam' && activeReviewTab === id) {
+        startRenameTab(e, id);
+        return;
+      }
+      switchReviewTab(id);
+    });
+  });
 }
 
 // ── Tags ──────────────────────────────────────────────────────────────────────
@@ -905,10 +947,12 @@ function updatePreview() {
 
 function renderSitePreview(r) {
   const expanded = sitePreviewExpanded;
-  const hasBody  = !!r.body;
-  const hasTab2  = !!r.tab2;
-  const showTabs = hasBody && hasTab2;
-  const bodyText = (sitePreviewBodyTab === 'tab2' && hasTab2) ? r.tab2 : r.body;
+  const bodyTabs = [
+    { id: 'steam', name: 'Steam Review', content: r.body },
+    ...(r.tabs || []),
+  ].filter(t => t.content);
+  const showTabs  = bodyTabs.length > 1;
+  const activeTab = bodyTabs.find(t => t.id === sitePreviewBodyTab) || bodyTabs[0];
 
   document.getElementById('site-preview').innerHTML = `
     <div class="card ${expanded ? 'expanded' : ''}">
@@ -927,29 +971,13 @@ function renderSitePreview(r) {
       </div>
       ${expanded ? `
         <div class="card-expanded">
-          ${hasBody || hasTab2 ? `
+          ${bodyTabs.length ? `
             ${showTabs ? `
               <div class="review-tabs">
-                <button type="button" class="review-tab ${sitePreviewBodyTab === 'steam' ? 'active' : ''}" data-review-tab="steam">Steam Review</button>
-                <button type="button" class="review-tab ${sitePreviewBodyTab === 'tab2' ? 'active' : ''}" data-review-tab="tab2">Tab 2</button>
+                ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${esc(t.id)}">${esc(t.name)}</button>`).join('')}
               </div>` : ''}
-            <p class="expanded-body">${esc(bodyText)}</p>
+            <p class="expanded-body">${esc(activeTab.content)}</p>
           ` : ''}
-          ${r.pros.length ? `
-            <section>
-              <h3>Pros</h3>
-              <ul>${r.pros.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
-            </section>` : ''}
-          ${r.cons.length ? `
-            <section>
-              <h3>Cons</h3>
-              <ul>${r.cons.map(c => `<li>${esc(c)}</li>`).join('')}</ul>
-            </section>` : ''}
-          ${r.verdict ? `
-            <section class="verdict">
-              <h3>Verdict</h3>
-              <p>${esc(r.verdict)}</p>
-            </section>` : ''}
         </div>
       ` : ''}
     </div>
@@ -970,7 +998,7 @@ function renderSitePreview(r) {
 
 function renderSteamPreview(r) {
   const yes = r.recommended;
-  const hasContent = r.summary || r.body || r.pros.length || r.cons.length || r.verdict;
+  const hasContent = r.summary || r.body;
 
   document.getElementById('steam-preview').innerHTML = `
     <div class="steam-card">
@@ -991,9 +1019,6 @@ function renderSteamPreview(r) {
           ${r.summary ? `<p><em>${esc(r.summary)}</em></p>` : ''}
           ${r.tags?.length ? `<p>${r.tags.map(t => esc(t)).join(' &middot; ')}</p>` : ''}
           ${r.body    ? `<p>${esc(r.body)}</p>` : ''}
-          ${r.pros.length ? `<h4>Pros</h4><ul>${r.pros.map(p=>`<li>${esc(p)}</li>`).join('')}</ul>` : ''}
-          ${r.cons.length ? `<h4>Cons</h4><ul>${r.cons.map(c=>`<li>${esc(c)}</li>`).join('')}</ul>` : ''}
-          ${r.verdict ? `<hr class="steam-hr"><h4>Verdict</h4><p>${esc(r.verdict)}</p>` : ''}
         ` : '<p class="steam-empty">Fill in the form to see the preview.</p>'}
       </div>
     </div>
@@ -1008,21 +1033,6 @@ function copyForSteam() {
   lines.push('');
   if (r.summary) { lines.push(`[i]${r.summary}[/i]`); lines.push(''); }
   if (r.body)    { lines.push(r.body); lines.push(''); }
-  if (r.pros.length) {
-    lines.push('[b]Pros[/b]'); lines.push('[list]');
-    r.pros.forEach(p => lines.push(`[*] ${p}`));
-    lines.push('[/list]'); lines.push('');
-  }
-  if (r.cons.length) {
-    lines.push('[b]Cons[/b]'); lines.push('[list]');
-    r.cons.forEach(c => lines.push(`[*] ${c}`));
-    lines.push('[/list]'); lines.push('');
-  }
-  if (r.verdict) {
-    lines.push('[hr][/hr]');
-    lines.push('[b]Verdict[/b]');
-    lines.push(r.verdict);
-  }
 
   navigator.clipboard.writeText(lines.join('\n')).then(() => {
     const btn = document.getElementById('copy-steam-btn');
@@ -1179,6 +1189,7 @@ function b64decode(b64) {
   if (steamId)  set('steam-id',  steamId);
 
   set('f-date', today());
+  renderReviewTabs();
   updatePreview();
   renderList();
 

@@ -49,10 +49,12 @@ function render() {
 
   app.innerHTML = visible.map(r => {
     const expanded = expandedId === r.id;
-    const hasBody = !!r.body;
-    const hasTab2 = !!r.tab2;
-    const showTabs = hasBody && hasTab2;
-    const bodyText = (expandedBodyTab === 'tab2' && hasTab2) ? r.tab2 : r.body;
+    const bodyTabs = [
+      { id: 'steam', name: 'Steam Review', content: r.body },
+      ...(r.tabs || []),
+    ].filter(t => t.content);
+    const showTabs  = bodyTabs.length > 1;
+    const activeTab = bodyTabs.find(t => t.id === expandedBodyTab) || bodyTabs[0];
     return `
       <div class="card ${expanded ? 'expanded' : ''}" data-id="${escHtml(r.id)}">
         <div class="card-main">
@@ -70,13 +72,12 @@ function render() {
         </div>
         ${expanded ? `
           <div class="card-expanded">
-            ${hasBody || hasTab2 ? `
+            ${bodyTabs.length ? `
               ${showTabs ? `
                 <div class="review-tabs">
-                  <button type="button" class="review-tab ${expandedBodyTab === 'steam' ? 'active' : ''}" data-review-tab="steam">Steam Review</button>
-                  <button type="button" class="review-tab ${expandedBodyTab === 'tab2' ? 'active' : ''}" data-review-tab="tab2">Tab 2</button>
+                  ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${escHtml(t.id)}">${escHtml(t.name)}</button>`).join('')}
                 </div>` : ''}
-              <p class="expanded-body">${escHtml(bodyText)}</p>
+              <p class="expanded-body">${escHtml(activeTab.content)}</p>
             ` : ''}
             ${r.pros?.length ? `
               <section>
