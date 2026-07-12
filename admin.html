@@ -345,8 +345,8 @@
       padding: 0.5rem 0.65rem; margin: 0.4rem 0; font-family: Consolas, 'Courier New', monospace;
       font-size: 0.8rem; overflow-x: auto;
     }
-    .steam-body .bb-spoiler { background: #3d5068; color: #3d5068; border-radius: 3px; padding: 0 0.2rem; cursor: pointer; }
-    .steam-body .bb-spoiler.revealed { background: transparent; color: inherit; }
+    .steam-body .bb-spoiler { background: #3d5068; color: #3d5068; border-radius: 3px; padding: 0 0.2rem; cursor: default; }
+    .steam-body .bb-spoiler:hover { background: transparent; color: inherit; }
     .steam-body a { color: #66c0f4; text-decoration: underline; }
     .steam-body table.bb-table { border-collapse: collapse; width: 100%; margin: 0.4rem 0; font-size: 0.78rem; }
     .steam-body table.bb-table th, .steam-body table.bb-table td { border: 1px solid #3d5068; padding: 0.3rem 0.5rem; text-align: left; }
@@ -365,7 +365,7 @@
       --sp-text:    #eaeaea;
       --sp-muted:   #8a8a9a;
       max-width: 560px;
-      margin-bottom: 1.75rem;
+      margin-bottom: 2.5rem;
     }
     #site-preview .card {
       display: flex;
@@ -373,11 +373,13 @@
       background: var(--sp-surface);
       border: 1px solid var(--sp-border);
       border-radius: 8px;
-      overflow: hidden;
       color: var(--sp-text);
       font-family: 'Segoe UI', system-ui, sans-serif;
       cursor: pointer;
       transition: border-color 0.2s;
+    }
+    #site-preview .card:has(.review-tabs) {
+      border-bottom-left-radius: 0;
     }
     #site-preview .card.expanded { border-color: var(--sp-accent); }
     #site-preview .card-main { display: flex; gap: 1.25rem; padding: 1.25rem; align-items: center; }
@@ -393,13 +395,22 @@
     #site-preview .meta { font-size: 0.78rem; color: var(--sp-muted); }
     #site-preview .tag-list { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.45rem; }
     #site-preview .tag-badge { background: var(--sp-border); color: var(--sp-muted); font-size: 0.7rem; padding: 0.12rem 0.5rem; border-radius: 999px; }
-    #site-preview .card-expanded { border-top: 1px solid var(--sp-border); padding: 1.5rem; }
-    #site-preview .review-tabs { display: flex; gap: 0.25rem; margin-bottom: 0.75rem; }
+    #site-preview .card-expanded { border-top: 1px solid var(--sp-border); padding: 1.5rem; position: relative; }
+    #site-preview .review-tabs {
+      position: absolute; left: -1px; right: 1.5rem; top: calc(100% + 1px);
+      display: flex; gap: 0.5rem;
+    }
     #site-preview .review-tab {
       background: var(--sp-bg); color: var(--sp-muted); border: 1px solid var(--sp-border);
-      border-radius: 4px; padding: 0.35rem 0.85rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+      border-top: none; border-radius: 0 0 6px 6px;
+      padding: 0.4rem 0.9rem 0.5rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+      box-shadow: 0 2px 3px rgba(0, 0, 0, 0.15);
     }
-    #site-preview .review-tab.active { background: var(--sp-surface); color: var(--sp-text); border-color: var(--sp-accent); }
+    #site-preview .review-tab.active {
+      background: var(--sp-surface); color: var(--sp-text);
+      border-color: var(--sp-accent);
+      margin-top: -1px; border-top-width: 2px;
+    }
     #site-preview .expanded-body { line-height: 1.8; margin-bottom: 1rem; }
     #site-preview .expanded-body ul { list-style: none; padding: 0; margin-bottom: 0.5rem; }
     #site-preview .expanded-body ul li { padding: 0.2rem 0 0.2rem 1.2rem; position: relative; }
@@ -418,8 +429,8 @@
       padding: 0.6rem 0.75rem; margin: 0.5rem 0; font-family: Consolas, 'Courier New', monospace;
       font-size: 0.85rem; overflow-x: auto;
     }
-    #site-preview .expanded-body .bb-spoiler { background: var(--sp-border); color: var(--sp-border); border-radius: 3px; padding: 0 0.2rem; cursor: pointer; }
-    #site-preview .expanded-body .bb-spoiler.revealed { background: transparent; color: inherit; }
+    #site-preview .expanded-body .bb-spoiler { background: var(--sp-border); color: var(--sp-border); border-radius: 3px; padding: 0 0.2rem; cursor: default; }
+    #site-preview .expanded-body .bb-spoiler:hover { background: transparent; color: inherit; }
     #site-preview .expanded-body a { color: var(--sp-accent); text-decoration: underline; }
     #site-preview .expanded-body table.bb-table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; font-size: 0.85rem; }
     #site-preview .expanded-body table.bb-table th, #site-preview .expanded-body table.bb-table td { border: 1px solid var(--sp-border); padding: 0.35rem 0.55rem; text-align: left; }
@@ -935,7 +946,7 @@ function renderBBCode(raw) {
   html = html
     .replace(/\[quote\]([\s\S]*?)\[\/quote\]/gi, '<blockquote class="bb-quote">$1</blockquote>')
     .replace(/\[code\]([\s\S]*?)\[\/code\]/gi, '<pre class="bb-code"><code>$1</code></pre>')
-    .replace(/\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi, '<span class="bb-spoiler" onclick="this.classList.add(\'revealed\')">$1</span>')
+    .replace(/\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi, '<span class="bb-spoiler">$1</span>')
     .replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '<strong>$1</strong>')
     .replace(/\[i\]([\s\S]*?)\[\/i\]/gi, '<em>$1</em>')
     .replace(/\[u\]([\s\S]*?)\[\/u\]/gi, '<u>$1</u>')
@@ -1177,13 +1188,11 @@ function renderSitePreview(r) {
       </div>
       ${expanded ? `
         <div class="card-expanded">
-          ${bodyTabs.length ? `
-            ${showTabs ? `
-              <div class="review-tabs">
-                ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${esc(t.id)}">${esc(t.name)}</button>`).join('')}
-              </div>` : ''}
-            <div class="expanded-body">${renderBBCode(activeTab.content)}</div>
-          ` : ''}
+          ${bodyTabs.length ? `<div class="expanded-body">${renderBBCode(activeTab.content)}</div>` : ''}
+          ${showTabs ? `
+            <div class="review-tabs">
+              ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${esc(t.id)}">${esc(t.name)}</button>`).join('')}
+            </div>` : ''}
         </div>
       ` : ''}
     </div>

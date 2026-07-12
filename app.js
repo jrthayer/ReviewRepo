@@ -72,13 +72,7 @@ function render() {
         </div>
         ${expanded ? `
           <div class="card-expanded">
-            ${bodyTabs.length ? `
-              ${showTabs ? `
-                <div class="review-tabs">
-                  ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${escHtml(t.id)}">${escHtml(t.name)}</button>`).join('')}
-                </div>` : ''}
-              <div class="expanded-body">${renderBBCode(activeTab.content)}</div>
-            ` : ''}
+            ${bodyTabs.length ? `<div class="expanded-body">${renderBBCode(activeTab.content)}</div>` : ''}
             ${r.pros?.length ? `
               <section>
                 <h3>Pros</h3>
@@ -94,6 +88,10 @@ function render() {
                 <h3>Verdict</h3>
                 <p>${escHtml(r.verdict)}</p>
               </section>` : ''}
+            ${showTabs ? `
+              <div class="review-tabs">
+                ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${escHtml(t.id)}">${escHtml(t.name)}</button>`).join('')}
+              </div>` : ''}
           </div>
         ` : ''}
       </div>
@@ -156,7 +154,7 @@ function renderBBCode(raw) {
   html = html
     .replace(/\[quote\]([\s\S]*?)\[\/quote\]/gi, '<blockquote class="bb-quote">$1</blockquote>')
     .replace(/\[code\]([\s\S]*?)\[\/code\]/gi, '<pre class="bb-code"><code>$1</code></pre>')
-    .replace(/\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi, '<span class="bb-spoiler" onclick="this.classList.add(\'revealed\')">$1</span>')
+    .replace(/\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi, '<span class="bb-spoiler">$1</span>')
     .replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '<strong>$1</strong>')
     .replace(/\[i\]([\s\S]*?)\[\/i\]/gi, '<em>$1</em>')
     .replace(/\[u\]([\s\S]*?)\[\/u\]/gi, '<u>$1</u>')
