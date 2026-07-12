@@ -3,6 +3,18 @@ let expandedId = null;
 let activeTag = null;
 let expandedBodyTab = 'steam';
 
+const STEAM_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+  <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.3"/>
+  <circle cx="8.7" cy="15.3" r="2.4" fill="currentColor"/>
+  <circle cx="15.2" cy="8.6" r="2.7" fill="none" stroke="currentColor" stroke-width="1.3"/>
+  <line x1="8.7" y1="15.3" x2="13.1" y2="10.7" stroke="currentColor" stroke-width="1.3"/>
+</svg>`;
+
+function steamAppId(coverImage) {
+  const m = (coverImage || '').match(/\/apps\/(\d+)\//);
+  return m ? m[1] : null;
+}
+
 async function init() {
   reviews = JSON.parse(localStorage.getItem('gh_reviews_cache') || '[]');
   render();
@@ -49,6 +61,7 @@ function render() {
 
   app.innerHTML = visible.map(r => {
     const expanded = expandedId === r.id;
+    const appId = steamAppId(r.coverImage);
     const bodyTabs = [
       { id: 'steam', name: 'Steam Review', content: r.body },
       ...(r.tabs || []),
@@ -62,7 +75,7 @@ function render() {
             ${r.coverImage ? `<img src="${escHtml(r.coverImage)}" alt="${escHtml(r.title)}">` : ''}
           </div>
           <div class="card-info">
-            <h2>${escHtml(r.title)}</h2>
+            <h2><span class="card-title-text">${escHtml(r.title)}</span>${appId ? `<a class="steam-link" href="https://store.steampowered.com/app/${appId}/" target="_blank" rel="noopener noreferrer" title="View on Steam" onclick="event.stopPropagation()">${STEAM_ICON}</a>` : ''}</h2>
             <span class="badge ${r.recommended ? 'yes' : 'no'}">${r.recommended ? 'Recommended' : 'Not Recommended'}</span>
             <p class="summary">${escHtml(r.summary)}</p>
             <div class="meta">${r.hoursPlayed} hrs &middot; ${formatDate(r.datePosted)}</div>

@@ -386,7 +386,12 @@
     #site-preview .card-cover { flex-shrink: 0; width: 120px; height: 80px; border-radius: 4px; overflow: hidden; background: var(--sp-border); }
     #site-preview .card-cover img { width: 100%; height: 100%; object-fit: cover; }
     #site-preview .card-info { flex: 1; min-width: 0; }
-    #site-preview .card-info h2 { font-size: 1.05rem; margin-bottom: 0.3rem; text-transform: none; letter-spacing: normal; color: var(--sp-text); }
+    #site-preview .card-info h2 {
+      display: flex; align-items: center; gap: 0.4rem;
+      font-size: 1.05rem; margin-bottom: 0.3rem; text-transform: none; letter-spacing: normal; color: var(--sp-text);
+    }
+    #site-preview .steam-link { display: inline-flex; align-items: center; color: var(--sp-muted); transition: color 0.15s; }
+    #site-preview .steam-link:hover { color: var(--sp-accent); }
     #site-preview .card-chevron { color: var(--sp-muted); font-size: 0.7rem; flex-shrink: 0; padding-left: 0.5rem; }
     #site-preview .badge { display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.55rem; border-radius: 4px; font-weight: 700; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
     #site-preview .badge.yes { background: var(--sp-green); color: #0f2a1e; }
@@ -1162,8 +1167,21 @@ function updatePreview() {
   renderSteamPreview(r);
 }
 
+function steamAppId(coverImage) {
+  const m = (coverImage || '').match(/\/apps\/(\d+)\//);
+  return m ? m[1] : null;
+}
+
+const STEAM_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+  <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.3"/>
+  <circle cx="8.7" cy="15.3" r="2.4" fill="currentColor"/>
+  <circle cx="15.2" cy="8.6" r="2.7" fill="none" stroke="currentColor" stroke-width="1.3"/>
+  <line x1="8.7" y1="15.3" x2="13.1" y2="10.7" stroke="currentColor" stroke-width="1.3"/>
+</svg>`;
+
 function renderSitePreview(r) {
   const expanded = sitePreviewExpanded;
+  const appId = steamAppId(r.coverImage);
   const bodyTabs = [
     { id: 'steam', name: 'Steam Review', content: r.body },
     ...(r.tabs || []),
@@ -1178,7 +1196,7 @@ function renderSitePreview(r) {
           ${r.coverImage ? `<img src="${esc(r.coverImage)}" alt="${esc(r.title)}">` : ''}
         </div>
         <div class="card-info">
-          <h2>${esc(r.title) || 'Untitled'}</h2>
+          <h2><span class="card-title-text">${esc(r.title) || 'Untitled'}</span>${appId ? `<a class="steam-link" href="https://store.steampowered.com/app/${appId}/" target="_blank" rel="noopener noreferrer" title="View on Steam" onclick="event.stopPropagation()">${STEAM_ICON}</a>` : ''}</h2>
           <span class="badge ${r.recommended ? 'yes' : 'no'}">${r.recommended ? 'Recommended' : 'Not Recommended'}</span>
           <p class="summary">${esc(r.summary)}</p>
           <div class="meta">${r.hoursPlayed} hrs &middot; ${r.datePosted ? fmtDate(r.datePosted) : '—'}</div>

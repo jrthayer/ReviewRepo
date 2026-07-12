@@ -150,9 +150,21 @@ header {
 }
 
 .card-info h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   font-size: 1.05rem;
   margin-bottom: 0.3rem;
 }
+
+.steam-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+  transition: color 0.15s;
+}
+
+.steam-link:hover { color: var(--accent); }
 
 .card-chevron {
   color: var(--muted);
