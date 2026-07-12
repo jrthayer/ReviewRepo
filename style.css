@@ -111,10 +111,11 @@ header {
   margin-bottom: 2.25rem;
   cursor: pointer;
   transition: border-color 0.2s;
+  position: relative;
 }
 
 .card:has(.review-tabs) {
-  border-bottom-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .card:hover,
@@ -206,12 +207,11 @@ header {
   border-top: 1px solid var(--border);
   padding: 1.5rem;
   animation: expandIn 0.18s ease;
-  position: relative;
 }
 
 @keyframes expandIn {
-  from { opacity: 0; transform: translateY(-5px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .expanded-body {
@@ -310,14 +310,15 @@ header {
   margin: 0.75rem 0;
 }
 
-/* ── Review tabs (book-index tabs hanging off the very bottom edge) ── */
+/* ── Review tabs (book-index tabs hanging off the top-right edge) ── */
 
 .review-tabs {
   position: absolute;
-  left: -1px;
-  right: 1.5rem;
-  top: calc(100% + 1px);
+  right: -1px;
+  left: 1.5rem;
+  bottom: calc(100% + 1px);
   display: flex;
+  justify-content: flex-end;
   gap: 0.5rem;
 }
 
@@ -325,13 +326,13 @@ header {
   background: var(--bg);
   color: var(--muted);
   border: 1px solid var(--border);
-  border-top: none;
-  border-radius: 0 0 6px 6px;
-  padding: 0.4rem 0.9rem 0.5rem;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  padding: 0.5rem 0.9rem 0.4rem;
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 -2px 3px rgba(0, 0, 0, 0.15);
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 
@@ -340,8 +341,8 @@ header {
   background: var(--surface);
   color: var(--text);
   border-color: var(--accent);
-  margin-top: -1px;
-  border-top-width: 2px;
+  margin-bottom: -1px;
+  border-bottom-width: 2px;
 }
 
 .card-expanded section {

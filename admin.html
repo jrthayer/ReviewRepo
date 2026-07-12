@@ -377,9 +377,10 @@
       font-family: 'Segoe UI', system-ui, sans-serif;
       cursor: pointer;
       transition: border-color 0.2s;
+      position: relative;
     }
     #site-preview .card:has(.review-tabs) {
-      border-bottom-left-radius: 0;
+      border-top-right-radius: 0;
     }
     #site-preview .card.expanded { border-color: var(--sp-accent); }
     #site-preview .card-main { display: flex; gap: 1.25rem; padding: 1.25rem; align-items: center; }
@@ -400,21 +401,21 @@
     #site-preview .meta { font-size: 0.78rem; color: var(--sp-muted); }
     #site-preview .tag-list { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.45rem; }
     #site-preview .tag-badge { background: var(--sp-border); color: var(--sp-muted); font-size: 0.7rem; padding: 0.12rem 0.5rem; border-radius: 999px; }
-    #site-preview .card-expanded { border-top: 1px solid var(--sp-border); padding: 1.5rem; position: relative; }
+    #site-preview .card-expanded { border-top: 1px solid var(--sp-border); padding: 1.5rem; }
     #site-preview .review-tabs {
-      position: absolute; left: -1px; right: 1.5rem; top: calc(100% + 1px);
-      display: flex; gap: 0.5rem;
+      position: absolute; right: -1px; left: 1.5rem; bottom: calc(100% + 1px);
+      display: flex; justify-content: flex-end; gap: 0.5rem;
     }
     #site-preview .review-tab {
       background: var(--sp-bg); color: var(--sp-muted); border: 1px solid var(--sp-border);
-      border-top: none; border-radius: 0 0 6px 6px;
-      padding: 0.4rem 0.9rem 0.5rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;
-      box-shadow: 0 2px 3px rgba(0, 0, 0, 0.15);
+      border-bottom: none; border-radius: 6px 6px 0 0;
+      padding: 0.5rem 0.9rem 0.4rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+      box-shadow: 0 -2px 3px rgba(0, 0, 0, 0.15);
     }
     #site-preview .review-tab.active {
       background: var(--sp-surface); color: var(--sp-text);
       border-color: var(--sp-accent);
-      margin-top: -1px; border-top-width: 2px;
+      margin-bottom: -1px; border-bottom-width: 2px;
     }
     #site-preview .expanded-body { line-height: 1.8; margin-bottom: 1rem; }
     #site-preview .expanded-body ul { list-style: none; padding: 0; margin-bottom: 0.5rem; }
