@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Review Admin</title>
+  <link rel="stylesheet" href="style.css">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -131,6 +132,9 @@
     }
     button:hover { opacity: 0.85; }
     button:disabled { opacity: 0.45; cursor: default; }
+    /* site-preview buttons (card, review tabs) mirror style.css exactly and
+       shouldn't inherit the admin UI's generic button hover/opacity styling */
+    #site-preview button:hover { opacity: 1; }
     button.secondary { background: var(--border); color: var(--text); }
     button.danger { background: var(--red); }
     button.sm { padding: 0.2rem 0.55rem; font-size: 0.75rem; }
@@ -165,26 +169,26 @@
 
     .dyn-section > label { margin-bottom: 0.25rem; }
 
-    .review-tabs { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
-    .review-tab {
+    .form-tabs { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
+    .form-tab {
       display: flex; align-items: center; gap: 0.3rem;
       background: var(--input-bg); color: var(--muted); border: 1px solid var(--border);
       border-bottom: none; border-radius: 4px 4px 0 0; padding: 0.35rem 0.55rem 0.35rem 0.75rem;
       font-size: 0.78rem; font-weight: 600; cursor: pointer; position: relative; top: 1px;
     }
-    .review-tab.active { background: var(--panel); color: var(--text); border-color: var(--accent); }
-    .review-tab-label { cursor: text; }
-    .review-tab-rename-input {
+    .form-tab.active { background: var(--panel); color: var(--text); border-color: var(--accent); }
+    .form-tab-label { cursor: text; }
+    .form-tab-rename-input {
       background: transparent; border: none; border-bottom: 1px dashed var(--muted);
       color: inherit; font: inherit; padding: 0; width: 6.5rem;
     }
-    .review-tab-rename-input:focus { outline: none; border-color: var(--accent); }
-    .review-tab-close {
+    .form-tab-rename-input:focus { outline: none; border-color: var(--accent); }
+    .form-tab-close {
       background: none; color: var(--muted); padding: 0 0.15rem;
       font-size: 0.85rem; line-height: 1; border-radius: 50%;
     }
-    .review-tab-close:hover { color: var(--text); }
-    .review-tab-add { padding: 0.35rem 0.65rem; font-weight: 700; }
+    .form-tab-close:hover { color: var(--text); }
+    .form-tab-add { padding: 0.35rem 0.65rem; font-weight: 700; }
 
     .review-editor {
       background: var(--input-bg); border: 1px solid var(--border);
@@ -295,7 +299,7 @@
     .key-toggle:hover { color: var(--text); opacity: 1; }
 
     /* ── Preview panel ── */
-    #right-panel h2 {
+    .panel-title {
       font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em;
       color: var(--muted); margin-bottom: 0.9rem;
     }
@@ -354,94 +358,22 @@
     .steam-body .bb-hr { border: none; border-top: 1px solid #3d5068; margin: 0.6rem 0; }
     .steam-empty { color: #8f98a0; font-style: italic; }
 
-    /* ── Site card preview (mirrors style.css) ── */
+    /* ── Site card preview: reuses style.css's real .card rules directly.
+       Only the color variables are re-scoped here, since the admin UI's own
+       --bg/--surface/etc (dark admin theme) differ from the live site's. ── */
     #site-preview {
-      --sp-bg:      #1a1a2e;
-      --sp-surface: #16213e;
-      --sp-border:  #2a2a4a;
-      --sp-accent:  #e94560;
-      --sp-green:   #57cc99;
-      --sp-red:     #e63946;
-      --sp-text:    #eaeaea;
-      --sp-muted:   #8a8a9a;
+      --bg:      #1a1a2e;
+      --surface: #16213e;
+      --border:  #2a2a4a;
+      --accent:  #e94560;
+      --green:   #57cc99;
+      --red:     #e63946;
+      --text:    #eaeaea;
+      --muted:   #8a8a9a;
       max-width: 560px;
       margin-bottom: 2.5rem;
-    }
-    #site-preview .card {
-      display: flex;
-      flex-direction: column;
-      background: var(--sp-surface);
-      border: 1px solid var(--sp-border);
-      border-radius: 8px;
-      color: var(--sp-text);
       font-family: 'Segoe UI', system-ui, sans-serif;
-      cursor: pointer;
-      transition: border-color 0.2s;
-      position: relative;
     }
-    #site-preview .card:has(.review-tabs) {
-      border-top-right-radius: 0;
-    }
-    #site-preview .card.expanded { border-color: var(--sp-accent); }
-    #site-preview .card-main { display: flex; gap: 1.25rem; padding: 1.25rem; align-items: center; }
-    #site-preview .card-cover { flex-shrink: 0; width: 120px; height: 80px; border-radius: 4px; overflow: hidden; background: var(--sp-border); }
-    #site-preview .card-cover img { width: 100%; height: 100%; object-fit: cover; }
-    #site-preview .card-info { flex: 1; min-width: 0; }
-    #site-preview .card-info h2 {
-      display: flex; align-items: center; gap: 0.4rem;
-      font-size: 1.05rem; margin-bottom: 0.3rem; text-transform: none; letter-spacing: normal; color: var(--sp-text);
-    }
-    #site-preview .steam-link { display: inline-flex; align-items: center; color: var(--sp-muted); transition: color 0.15s; }
-    #site-preview .steam-link:hover { color: var(--sp-accent); }
-    #site-preview .card-chevron { color: var(--sp-muted); font-size: 0.7rem; flex-shrink: 0; padding-left: 0.5rem; }
-    #site-preview .badge { display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.55rem; border-radius: 4px; font-weight: 700; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
-    #site-preview .badge.yes { background: var(--sp-green); color: #0f2a1e; }
-    #site-preview .badge.no  { background: var(--sp-red); color: #fff; }
-    #site-preview .summary { color: var(--sp-muted); font-size: 0.88rem; margin-bottom: 0.35rem; }
-    #site-preview .meta { font-size: 0.78rem; color: var(--sp-muted); }
-    #site-preview .tag-list { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.45rem; }
-    #site-preview .tag-badge { background: var(--sp-border); color: var(--sp-muted); font-size: 0.7rem; padding: 0.12rem 0.5rem; border-radius: 999px; }
-    #site-preview .card-expanded { border-top: 1px solid var(--sp-border); padding: 1.5rem; }
-    #site-preview .review-tabs {
-      position: absolute; right: -1px; left: 1.5rem; bottom: calc(100% + 1px);
-      display: flex; justify-content: flex-end; gap: 0.5rem;
-    }
-    #site-preview .review-tab {
-      background: var(--sp-bg); color: var(--sp-muted); border: 1px solid var(--sp-border);
-      border-bottom: none; border-radius: 6px 6px 0 0;
-      padding: 0.5rem 0.9rem 0.4rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;
-      box-shadow: 0 -2px 3px rgba(0, 0, 0, 0.15);
-    }
-    #site-preview .review-tab.active {
-      background: var(--sp-surface); color: var(--sp-text);
-      border-color: var(--sp-accent);
-      margin-bottom: -1px; border-bottom-width: 2px;
-    }
-    #site-preview .expanded-body { line-height: 1.8; margin-bottom: 1rem; }
-    #site-preview .expanded-body ul { list-style: none; padding: 0; margin-bottom: 0.5rem; }
-    #site-preview .expanded-body ul li { padding: 0.2rem 0 0.2rem 1.2rem; position: relative; }
-    #site-preview .expanded-body ul li::before { content: '•'; position: absolute; left: 0; color: var(--sp-accent); }
-    #site-preview .expanded-body .bb-h1 { display: block; font-size: 1.1rem; font-weight: 700; margin: 0.5rem 0 0.25rem; }
-    #site-preview .expanded-body .bb-h2 { display: block; font-size: 1rem; font-weight: 700; margin: 0.5rem 0 0.25rem; }
-    #site-preview .expanded-body .bb-h3 { display: block; font-size: 0.92rem; font-weight: 700; margin: 0.5rem 0 0.25rem; }
-    #site-preview .expanded-body ol { margin: 0 0 0.5rem 1.2rem; }
-    #site-preview .expanded-body ol li { padding: 0.15rem 0; }
-    #site-preview .expanded-body .bb-quote {
-      border-left: 3px solid var(--sp-accent); padding: 0.3rem 0 0.3rem 0.85rem;
-      margin: 0.5rem 0; color: var(--sp-muted); font-style: italic;
-    }
-    #site-preview .expanded-body .bb-code {
-      display: block; background: var(--sp-bg); border: 1px solid var(--sp-border); border-radius: 4px;
-      padding: 0.6rem 0.75rem; margin: 0.5rem 0; font-family: Consolas, 'Courier New', monospace;
-      font-size: 0.85rem; overflow-x: auto;
-    }
-    #site-preview .expanded-body .bb-spoiler { background: var(--sp-border); color: var(--sp-border); border-radius: 3px; padding: 0 0.2rem; cursor: default; }
-    #site-preview .expanded-body .bb-spoiler:hover { background: transparent; color: inherit; }
-    #site-preview .expanded-body a { color: var(--sp-accent); text-decoration: underline; }
-    #site-preview .expanded-body table.bb-table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; font-size: 0.85rem; }
-    #site-preview .expanded-body table.bb-table th, #site-preview .expanded-body table.bb-table td { border: 1px solid var(--sp-border); padding: 0.35rem 0.55rem; text-align: left; }
-    #site-preview .expanded-body table.bb-table th { background: var(--sp-bg); }
-    #site-preview .expanded-body .bb-hr { border: none; border-top: 1px solid var(--sp-border); margin: 0.75rem 0; }
 
     @media (max-width: 840px) {
       body { overflow: auto; }
@@ -567,7 +499,7 @@
       </label>
 
       <div class="dyn-section">
-        <div class="review-tabs" id="review-tabs"></div>
+        <div class="form-tabs" id="review-tabs"></div>
         <div class="review-editor review-tab-panel">
           <div class="format-toolbar">
             <button type="button" onclick="applyFormat('bold')" title="Bold"><b>B</b></button>
@@ -605,11 +537,11 @@
 
   <!-- ── Right: preview ── -->
   <div id="right-panel">
-    <h2>Site Card Preview</h2>
+    <h2 class="panel-title">Site Card Preview</h2>
     <div id="site-preview"></div>
 
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.9rem">
-      <h2 style="margin-bottom:0">Steam Preview</h2>
+      <h2 class="panel-title" style="margin-bottom:0">Steam Preview</h2>
       <button type="button" class="sm secondary" id="copy-steam-btn" onclick="copyForSteam()">Copy for Steam</button>
     </div>
     <div id="steam-preview"></div>
@@ -1020,12 +952,12 @@ function startRenameTab(e, id) {
   e.stopPropagation();
   const tab = extraTabs.find(t => t.id === id);
   if (!tab) return;
-  const label = e.target.closest('.review-tab-label');
+  const label = e.target.closest('.form-tab-label');
   if (!label) return;
   const input = document.createElement('input');
   input.type = 'text';
   input.value = tab.name;
-  input.className = 'review-tab-rename-input';
+  input.className = 'form-tab-rename-input';
   input.onclick = ev => ev.stopPropagation();
   input.onkeydown = ev => {
     if (ev.key === 'Enter') input.blur();
@@ -1043,23 +975,23 @@ function startRenameTab(e, id) {
 function renderReviewTabs() {
   const el = document.getElementById('review-tabs');
   const extraHtml = extraTabs.map(t => `
-    <button type="button" class="review-tab ${activeReviewTab === t.id ? 'active' : ''}" data-tab-id="${esc(t.id)}">
-      <span class="review-tab-label">${esc(t.name)}</span>
-      <span class="review-tab-close" onclick="deleteReviewTab(event, '${t.id}')">&times;</span>
+    <button type="button" class="form-tab ${activeReviewTab === t.id ? 'active' : ''}" data-tab-id="${esc(t.id)}">
+      <span class="form-tab-label">${esc(t.name)}</span>
+      <span class="form-tab-close" onclick="deleteReviewTab(event, '${t.id}')">&times;</span>
     </button>
   `).join('');
 
   el.innerHTML = `
-    <button type="button" class="review-tab ${activeReviewTab === 'steam' ? 'active' : ''}" data-tab-id="steam">Steam Review</button>
+    <button type="button" class="form-tab ${activeReviewTab === 'steam' ? 'active' : ''}" data-tab-id="steam">Steam Review</button>
     ${extraHtml}
-    <button type="button" class="review-tab review-tab-add" onclick="addReviewTab()">+</button>
+    <button type="button" class="form-tab form-tab-add" onclick="addReviewTab()">+</button>
   `;
 
-  el.querySelectorAll('.review-tab[data-tab-id]').forEach(btn => {
+  el.querySelectorAll('.form-tab[data-tab-id]').forEach(btn => {
     btn.addEventListener('click', e => {
-      if (e.target.closest('.review-tab-close') || e.target.closest('.review-tab-rename-input')) return;
+      if (e.target.closest('.form-tab-close') || e.target.closest('.form-tab-rename-input')) return;
       const id = btn.dataset.tabId;
-      const labelClicked = e.target.closest('.review-tab-label');
+      const labelClicked = e.target.closest('.form-tab-label');
       if (labelClicked && id !== 'steam' && activeReviewTab === id) {
         startRenameTab(e, id);
         return;
