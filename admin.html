@@ -1120,51 +1120,14 @@ function updatePreview() {
 
 function renderSitePreview(r) {
   const expanded = sitePreviewExpanded;
-  const appId = steamAppId(r.coverImage);
-  const bodyTabs = [
-    { id: 'steam', name: 'Steam Review', content: r.body },
-    ...(r.tabs || []).filter(t => t.content),
-  ];
-  const showTabs  = true;
-  const activeTab = bodyTabs.find(t => t.id === sitePreviewBodyTab) || bodyTabs[0];
-  const subTabs   = expanded ? splitSubTabs(activeTab.content) : null;
-  const activeSub = subTabs ? subTabs[Math.min(sitePreviewSubTab, subTabs.length - 1)] : null;
 
-  document.getElementById('site-preview').innerHTML = `
-    <div class="card ${expanded ? 'expanded' : ''}">
-      <div class="card-main">
-        <div class="card-cover">
-          ${r.coverImage ? `<img src="${escHtml(r.coverImage)}" alt="${escHtml(r.title)}">` : ''}
-        </div>
-        <div class="card-info">
-          <h2><span class="card-title-text">${escHtml(r.title) || 'Untitled'}</span>${appId ? `<a class="steam-link" href="https://store.steampowered.com/app/${appId}/" target="_blank" rel="noopener noreferrer" title="View on Steam" onclick="event.stopPropagation()">${STEAM_ICON}</a>` : ''}</h2>
-          <span class="badge ${r.recommended ? 'yes' : 'no'}">${r.recommended ? 'Recommended' : 'Not Recommended'}</span>
-          <p class="summary">${escHtml(r.summary)}</p>
-          <div class="meta">${r.hoursPlayed} hrs &middot; ${r.datePosted ? formatDate(r.datePosted) : '—'}</div>
-          ${r.tags?.length ? `<div class="tag-list">${r.tags.map(t => `<span class="tag-badge">${escHtml(t)}</span>`).join('')}</div>` : ''}
-        </div>
-        <div class="card-chevron">${expanded ? '▲' : '▼'}</div>
-      </div>
-      ${expanded ? `
-        <div class="card-expanded">
-          ${bodyTabs.length ? `
-            <div class="expanded-body">
-              ${subTabs ? `
-                <div class="sub-tabs">
-                  ${subTabs.map((st, i) => `<button type="button" class="sub-tab ${i === sitePreviewSubTab ? 'active' : ''}" data-sub-tab="${i}">${escHtml(st.name)}</button>`).join('')}
-                </div>
-                ${renderBBCode(activeSub.content)}
-              ` : renderBBCode(activeTab.content)}
-            </div>
-          ` : ''}
-          ${showTabs ? `
-            <div class="review-tabs">
-              ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${escHtml(t.id)}">${escHtml(t.name)}</button>`).join('')}
-            </div>` : ''}
-        </div>
-      ` : ''}
-    </div>
-  `;
+  document.getElementById('site-preview').innerHTML = renderCard(r, {
+    expanded,
+    activeTabId: sitePreviewBodyTab,
+    activeSubIndex: sitePreviewSubTab,
+    permalinkHref: r.id ? siteReviewUrl(r.id) : null,
+    disablePermalinkNav: true,
+  });
   document.querySelector('#site-preview .card-main').onclick = () => {
     sitePreviewExpanded = !sitePreviewExpanded;
     sitePreviewBodyTab = 'steam';

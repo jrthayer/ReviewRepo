@@ -89,3 +89,79 @@ function renderBBCode(raw) {
 
   return html;
 }
+
+// Renders one review card's full markup (collapsed or expanded), used both for
+// the live site's card list and the admin tool's "Site Card Preview". Each
+// caller wires up its own click/expand behavior on top of this HTML, since
+// that differs (a list of cards with shared expand state vs. a single card
+// mirroring the live-editing form).
+function renderCard(r, opts = {}) {
+  const {
+    expanded = false,
+    activeTabId = 'steam',
+    activeSubIndex = 0,
+    permalinkHref = null,
+    disablePermalinkNav = false,
+  } = opts;
+
+  const appId = steamAppId(r.coverImage);
+  const bodyTabs = [
+    { id: 'steam', name: 'Steam Review', content: r.body },
+    ...(r.tabs || []).filter(t => t.content),
+  ];
+  const activeTab = bodyTabs.find(t => t.id === activeTabId) || bodyTabs[0];
+  const subTabs   = expanded ? splitSubTabs(activeTab.content) : null;
+  const activeSub = subTabs ? subTabs[Math.min(activeSubIndex, subTabs.length - 1)] : null;
+
+  return `
+    <div class="card ${expanded ? 'expanded' : ''}" data-id="${escHtml(r.id)}">
+      <div class="card-main">
+        <div class="card-cover">
+          ${r.coverImage ? `<img src="${escHtml(r.coverImage)}" alt="${escHtml(r.title)}">` : ''}
+        </div>
+        <div class="card-info">
+          <h2><span class="card-title-text">${escHtml(r.title) || 'Untitled'}</span>${appId ? `<a class="steam-link" href="https://store.steampowered.com/app/${appId}/" target="_blank" rel="noopener noreferrer" title="View on Steam" onclick="event.stopPropagation()">${STEAM_ICON}</a>` : ''}</h2>
+          <span class="badge ${r.recommended ? 'yes' : 'no'}">${r.recommended ? 'Recommended' : 'Not Recommended'}</span>
+          <p class="summary">${escHtml(r.summary)}</p>
+          <div class="meta">${r.hoursPlayed} hrs &middot; ${r.datePosted ? formatDate(r.datePosted) : '—'}</div>
+          ${r.tags?.length ? `<div class="tag-list">${r.tags.map(t => `<span class="tag-badge">${escHtml(t)}</span>`).join('')}</div>` : ''}
+        </div>
+        <div class="card-chevron">${expanded ? '▲' : '▼'}</div>
+      </div>
+      ${expanded ? `
+        <div class="card-expanded">
+          <div class="expanded-body">
+            ${subTabs ? `
+              <div class="sub-tabs">
+                ${subTabs.map((st, i) => `<button type="button" class="sub-tab ${i === activeSubIndex ? 'active' : ''}" data-sub-tab="${i}">${escHtml(st.name)}</button>`).join('')}
+              </div>
+              ${renderBBCode(activeSub.content)}
+            ` : renderBBCode(activeTab.content)}
+          </div>
+          ${r.pros?.length ? `
+            <section>
+              <h3>Pros</h3>
+              <ul>${r.pros.map(p => `<li>${escHtml(p)}</li>`).join('')}</ul>
+            </section>` : ''}
+          ${r.cons?.length ? `
+            <section>
+              <h3>Cons</h3>
+              <ul>${r.cons.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul>
+            </section>` : ''}
+          ${r.verdict ? `
+            <section class="verdict">
+              <h3>Verdict</h3>
+              <p>${escHtml(r.verdict)}</p>
+            </section>` : ''}
+          ${activeTab.id === 'steam' && permalinkHref ? `
+            <div class="card-permalink">
+              <a href="${escHtml(permalinkHref)}" onclick="${disablePermalinkNav ? 'event.preventDefault();' : ''}event.stopPropagation()">${SITE_LINK_TEXT}</a>
+            </div>` : ''}
+          <div class="review-tabs">
+            ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${escHtml(t.id)}">${escHtml(t.name)}</button>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}

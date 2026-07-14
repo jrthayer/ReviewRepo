@@ -58,71 +58,12 @@ function render() {
     return;
   }
 
-  app.innerHTML = visible.map(r => {
-    const expanded = expandedId === r.id;
-    const appId = steamAppId(r.coverImage);
-    const bodyTabs = [
-      { id: 'steam', name: 'Steam Review', content: r.body },
-      ...(r.tabs || []).filter(t => t.content),
-    ];
-    const showTabs  = true;
-    const activeTab = bodyTabs.find(t => t.id === expandedBodyTab) || bodyTabs[0];
-    const subTabs   = expanded ? splitSubTabs(activeTab.content) : null;
-    const activeSub = subTabs ? subTabs[Math.min(expandedSubTab, subTabs.length - 1)] : null;
-    return `
-      <div class="card ${expanded ? 'expanded' : ''}" data-id="${escHtml(r.id)}">
-        <div class="card-main">
-          <div class="card-cover">
-            ${r.coverImage ? `<img src="${escHtml(r.coverImage)}" alt="${escHtml(r.title)}">` : ''}
-          </div>
-          <div class="card-info">
-            <h2><span class="card-title-text">${escHtml(r.title)}</span>${appId ? `<a class="steam-link" href="https://store.steampowered.com/app/${appId}/" target="_blank" rel="noopener noreferrer" title="View on Steam" onclick="event.stopPropagation()">${STEAM_ICON}</a>` : ''}</h2>
-            <span class="badge ${r.recommended ? 'yes' : 'no'}">${r.recommended ? 'Recommended' : 'Not Recommended'}</span>
-            <p class="summary">${escHtml(r.summary)}</p>
-            <div class="meta">${r.hoursPlayed} hrs &middot; ${formatDate(r.datePosted)}</div>
-            ${r.tags?.length ? `<div class="tag-list">${r.tags.map(t => `<span class="tag-badge">${escHtml(t)}</span>`).join('')}</div>` : ''}
-          </div>
-          <div class="card-chevron">${expanded ? '▲' : '▼'}</div>
-        </div>
-        ${expanded ? `
-          <div class="card-expanded">
-            ${bodyTabs.length ? `
-              <div class="expanded-body">
-                ${subTabs ? `
-                  <div class="sub-tabs">
-                    ${subTabs.map((st, i) => `<button type="button" class="sub-tab ${i === expandedSubTab ? 'active' : ''}" data-sub-tab="${i}">${escHtml(st.name)}</button>`).join('')}
-                  </div>
-                  ${renderBBCode(activeSub.content)}
-                ` : renderBBCode(activeTab.content)}
-              </div>
-            ` : ''}
-            ${r.pros?.length ? `
-              <section>
-                <h3>Pros</h3>
-                <ul>${r.pros.map(p => `<li>${escHtml(p)}</li>`).join('')}</ul>
-              </section>` : ''}
-            ${r.cons?.length ? `
-              <section>
-                <h3>Cons</h3>
-                <ul>${r.cons.map(c => `<li>${escHtml(c)}</li>`).join('')}</ul>
-              </section>` : ''}
-            ${r.verdict ? `
-              <section class="verdict">
-                <h3>Verdict</h3>
-                <p>${escHtml(r.verdict)}</p>
-              </section>` : ''}
-            <div class="card-permalink">
-              <a href="?review=${escHtml(r.id)}" onclick="event.stopPropagation()">${SITE_LINK_TEXT}</a>
-            </div>
-            ${showTabs ? `
-              <div class="review-tabs">
-                ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${escHtml(t.id)}">${escHtml(t.name)}</button>`).join('')}
-              </div>` : ''}
-          </div>
-        ` : ''}
-      </div>
-    `;
-  }).join('');
+  app.innerHTML = visible.map(r => renderCard(r, {
+    expanded: expandedId === r.id,
+    activeTabId: expandedBodyTab,
+    activeSubIndex: expandedSubTab,
+    permalinkHref: `?review=${r.id}`,
+  })).join('');
 
   app.querySelectorAll('.card').forEach(card => {
     card.addEventListener('click', () => {
