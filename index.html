@@ -19,8 +19,14 @@
   <div id="tag-filters"></div>
   <main id="app"></main>
   <script>
+    const _sh = document.createElement('script');
+    _sh.src = 'shared.js?v=' + _v;
+    _sh.async = false;
+    document.body.appendChild(_sh);
+
     const _s = document.createElement('script');
     _s.src = 'app.js?v=' + _v;
+    _s.async = false;
     document.body.appendChild(_s);
   </script>
 </body>

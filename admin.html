@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Review Admin</title>
   <link rel="stylesheet" href="style.css">
+  <script src="shared.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -177,7 +178,9 @@
       font-size: 0.78rem; font-weight: 600; cursor: pointer; position: relative; top: 1px;
     }
     .form-tab.active { background: var(--panel); color: var(--text); border-color: var(--accent); }
-    .form-tab-label { cursor: text; }
+    .form-tab[draggable="true"] { cursor: grab; }
+    .form-tab.dragging { opacity: 0.4; }
+    .form-tab.drag-over { border-color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); }
     .form-tab-rename-input {
       background: transparent; border: none; border-bottom: 1px dashed var(--muted);
       color: inherit; font: inherit; padding: 0; width: 6.5rem;
@@ -553,15 +556,39 @@
 
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
-let reviews      = [];
-let fileSha      = null;
-let editingId    = null;
-let steamLibrary  = [];
-let currentTags   = [];
-let tagHlIndex    = -1;
-let steamBody     = '';
-let extraTabs     = []; // [{ id, name, content }]
-let activeReviewTab = 'steam';
+let reviews          = [];
+let fileSha          = null;
+let editingId        = null;
+let steamLibrary     = [];
+let currentTags      = [];
+let tagHlIndex       = -1;
+let steamBody        = '';
+let extraTabs        = []; // [{ id, name, content }]
+let activeReviewTab  = 'steam';
+let draggedTabId     = null;
+let sitePreviewExpanded = true;
+let sitePreviewBodyTab  = 'steam';
+let sitePreviewSubTab   = 0;
+
+// ── Constants & helpers ────────────────────────────────────────────────────────
+const FORMAT_TAGS = {
+  bold:      ['[b]', '[/b]'],
+  italic:    ['[i]', '[/i]'],
+  underline: ['[u]', '[/u]'],
+  strike:    ['[strike]', '[/strike]'],
+  header1:   ['[h1]', '[/h1]'],
+  header2:   ['[h2]', '[/h2]'],
+  header3:   ['[h3]', '[/h3]'],
+  quote:     ['[quote]', '[/quote]'],
+  code:      ['[code]', '[/code]'],
+  spoiler:   ['[spoiler]', '[/spoiler]'],
+};
+
+const PROXY = url => 'https://corsproxy.io/?' + encodeURIComponent(url);
+
+const v   = id => document.getElementById(id).value.trim();
+const set = (id, val) => { document.getElementById(id).value = val; };
+const today = () => new Date().toISOString().slice(0, 10);
 
 // ── Config ───────────────────────────────────────────────────────────────────
 function getCfg() {
@@ -660,7 +687,7 @@ function renderList() {
 
   el.innerHTML = reviews.map(r => `
     <div class="r-item ${editingId === r.id ? 'active' : ''}">
-      <button onclick="loadReview('${r.id}')">${esc(r.title)}</button>
+      <button onclick="loadReview('${r.id}')">${escHtml(r.title)}</button>
     </div>`).join('');
 }
 
@@ -794,19 +821,6 @@ function onReviewTextInput() {
 }
 
 // ── Formatting toolbar (Steam BBCode) ───────────────────────────────────────────
-const FORMAT_TAGS = {
-  bold:      ['[b]', '[/b]'],
-  italic:    ['[i]', '[/i]'],
-  underline: ['[u]', '[/u]'],
-  strike:    ['[strike]', '[/strike]'],
-  header1:   ['[h1]', '[/h1]'],
-  header2:   ['[h2]', '[/h2]'],
-  header3:   ['[h3]', '[/h3]'],
-  quote:     ['[quote]', '[/quote]'],
-  code:      ['[code]', '[/code]'],
-  spoiler:   ['[spoiler]', '[/spoiler]'],
-};
-
 function applyFormat(type) {
   const textarea = document.getElementById('f-review-text');
   const start = textarea.selectionStart;
@@ -858,71 +872,6 @@ function applyFormat(type) {
   textarea.focus();
   textarea.setSelectionRange(selectFrom, selectTo);
   onReviewTextInput();
-}
-
-function splitSubTabs(raw) {
-  if (!raw) return null;
-  const re = /\[tab=([^\]]+)\]([\s\S]*?)\[\/tab\]/gi;
-  const tabs = [];
-  let m;
-  while ((m = re.exec(raw))) {
-    tabs.push({ name: m[1].trim(), content: m[2].trim() });
-  }
-  return tabs.length ? tabs : null;
-}
-
-function renderBBCode(raw) {
-  if (!raw) return '';
-  let html = esc(raw);
-
-  const noparseBlocks = [];
-  html = html.replace(/\[noparse\]([\s\S]*?)\[\/noparse\]/gi, (_, inner) => {
-    const token = `NP${noparseBlocks.length}`;
-    noparseBlocks.push(inner.replace(/\n/g, '<br>'));
-    return token;
-  });
-
-  html = html.replace(/\[table\]([\s\S]*?)\[\/table\]/gi, (_, tableInner) => {
-    const rows = [...tableInner.matchAll(/\[tr\]([\s\S]*?)\[\/tr\]/gi)].map(m => {
-      const cells = [...m[1].matchAll(/\[(th|td)\]([\s\S]*?)\[\/\1\]/gi)]
-        .map(c => `<${c[1]}>${c[2].trim()}</${c[1]}>`).join('');
-      return `<tr>${cells}</tr>`;
-    }).join('');
-    return `<table class="bb-table">${rows}</table>`;
-  });
-
-  html = html.replace(/\[list\]([\s\S]*?)\[\/list\]/gi, (_, inner) => {
-    const items = inner.split(/\[\*\]/).map(s => s.trim()).filter(Boolean);
-    return `<ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>`;
-  });
-  html = html.replace(/\[olist\]([\s\S]*?)\[\/olist\]/gi, (_, inner) => {
-    const items = inner.split(/\[\*\]/).map(s => s.trim()).filter(Boolean);
-    return `<ol>${items.map(i => `<li>${i}</li>`).join('')}</ol>`;
-  });
-
-  html = html
-    .replace(/\[quote\]([\s\S]*?)\[\/quote\]/gi, '<blockquote class="bb-quote">$1</blockquote>')
-    .replace(/\[code\]([\s\S]*?)\[\/code\]/gi, '<pre class="bb-code"><code>$1</code></pre>')
-    .replace(/\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi, '<span class="bb-spoiler">$1</span>')
-    .replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '<strong>$1</strong>')
-    .replace(/\[i\]([\s\S]*?)\[\/i\]/gi, '<em>$1</em>')
-    .replace(/\[u\]([\s\S]*?)\[\/u\]/gi, '<u>$1</u>')
-    .replace(/\[strike\]([\s\S]*?)\[\/strike\]/gi, '<s>$1</s>')
-    .replace(/\[h1\]([\s\S]*?)\[\/h1\]/gi, '<span class="bb-h1">$1</span>')
-    .replace(/\[h2\]([\s\S]*?)\[\/h2\]/gi, '<span class="bb-h2">$1</span>')
-    .replace(/\[h3\]([\s\S]*?)\[\/h3\]/gi, '<span class="bb-h3">$1</span>');
-
-  html = html.replace(/\[url=(.+?)\]([\s\S]*?)\[\/url\]/gi, (_, url, text) => {
-    return /^https?:\/\//i.test(url)
-      ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`
-      : text;
-  });
-
-  html = html.replace(/\[hr\]\[\/hr\]/gi, '<hr class="bb-hr">');
-  html = html.replace(/\n/g, '<br>');
-  html = html.replace(/NP(\d+)/g, (_, i) => noparseBlocks[Number(i)]);
-
-  return html;
 }
 
 function syncActiveTabContent() {
@@ -1013,8 +962,8 @@ function startRenameTab(e, id) {
 function renderReviewTabs() {
   const el = document.getElementById('review-tabs');
   const extraHtml = extraTabs.map(t => `
-    <button type="button" class="form-tab ${activeReviewTab === t.id ? 'active' : ''}" data-tab-id="${esc(t.id)}">
-      <span class="form-tab-label">${esc(t.name)}</span>
+    <button type="button" class="form-tab ${activeReviewTab === t.id ? 'active' : ''}" data-tab-id="${escHtml(t.id)}" draggable="true">
+      <span class="form-tab-label">${escHtml(t.name)}</span>
       <span class="form-tab-close" onclick="deleteReviewTab(event, '${t.id}')">&times;</span>
     </button>
   `).join('');
@@ -1036,7 +985,41 @@ function renderReviewTabs() {
       }
       switchReviewTab(id);
     });
+
+    if (btn.dataset.tabId === 'steam') return;
+
+    btn.addEventListener('dragstart', e => {
+      draggedTabId = btn.dataset.tabId;
+      e.dataTransfer.effectAllowed = 'move';
+      requestAnimationFrame(() => btn.classList.add('dragging'));
+    });
+    btn.addEventListener('dragend', () => {
+      draggedTabId = null;
+      el.querySelectorAll('.form-tab').forEach(b => b.classList.remove('dragging', 'drag-over'));
+    });
+    btn.addEventListener('dragover', e => {
+      if (!draggedTabId || draggedTabId === btn.dataset.tabId) return;
+      e.preventDefault();
+      btn.classList.add('drag-over');
+    });
+    btn.addEventListener('dragleave', () => btn.classList.remove('drag-over'));
+    btn.addEventListener('drop', e => {
+      e.preventDefault();
+      btn.classList.remove('drag-over');
+      if (!draggedTabId || draggedTabId === btn.dataset.tabId) return;
+      reorderReviewTabs(draggedTabId, btn.dataset.tabId);
+    });
   });
+}
+
+function reorderReviewTabs(draggedId, targetId) {
+  const fromIdx = extraTabs.findIndex(t => t.id === draggedId);
+  const toIdx = extraTabs.findIndex(t => t.id === targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const [moved] = extraTabs.splice(fromIdx, 1);
+  extraTabs.splice(toIdx, 0, moved);
+  renderReviewTabs();
+  updatePreview();
 }
 
 // ── Tags ──────────────────────────────────────────────────────────────────────
@@ -1049,7 +1032,7 @@ function getAllTags() {
 function renderTags() {
   const box = document.getElementById('tags-chips');
   box.innerHTML = currentTags.map((t, i) => `
-    <span class="tag-chip">${esc(t)}<button type="button" onclick="removeTagAt(${i})">×</button></span>
+    <span class="tag-chip">${escHtml(t)}<button type="button" onclick="removeTagAt(${i})">×</button></span>
   `).join('');
 }
 
@@ -1087,10 +1070,10 @@ function filterTagSuggestions() {
 
   if (!hits.length && !q) { box.className = ''; box.innerHTML = ''; return; }
 
-  let html = hits.slice(0, 12).map(t => `<div class="tag-suggestion" onmousedown="addTag('${esc(t).replace(/'/g, "\\'")}')">${esc(t)}</div>`).join('');
+  let html = hits.slice(0, 12).map(t => `<div class="tag-suggestion" onmousedown="addTag('${escHtml(t).replace(/'/g, "\\'")}')">${escHtml(t)}</div>`).join('');
   const exactMatch = available.some(t => t.toLowerCase() === q) || currentTags.some(t => t.toLowerCase() === q);
   if (q && !exactMatch) {
-    html += `<div class="tag-suggestion create" onmousedown="addTag('${esc(q).replace(/'/g, "\\'")}')">+ Create "${esc(q)}"</div>`;
+    html += `<div class="tag-suggestion create" onmousedown="addTag('${escHtml(q).replace(/'/g, "\\'")}')">+ Create "${escHtml(q)}"</div>`;
   }
   box.className = 'open';
   box.innerHTML = html;
@@ -1129,27 +1112,11 @@ function onTagKeydown(e) {
 }
 
 // ── Preview ───────────────────────────────────────────────────────────────────
-let sitePreviewExpanded = true;
-let sitePreviewBodyTab  = 'steam';
-let sitePreviewSubTab   = 0;
-
 function updatePreview() {
   const r = getForm();
   renderSitePreview(r);
   renderSteamPreview(r);
 }
-
-function steamAppId(coverImage) {
-  const m = (coverImage || '').match(/\/apps\/(\d+)\//);
-  return m ? m[1] : null;
-}
-
-const STEAM_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-  <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.3"/>
-  <circle cx="8.7" cy="15.3" r="2.4" fill="currentColor"/>
-  <circle cx="15.2" cy="8.6" r="2.7" fill="none" stroke="currentColor" stroke-width="1.3"/>
-  <line x1="8.7" y1="15.3" x2="13.1" y2="10.7" stroke="currentColor" stroke-width="1.3"/>
-</svg>`;
 
 function renderSitePreview(r) {
   const expanded = sitePreviewExpanded;
@@ -1167,14 +1134,14 @@ function renderSitePreview(r) {
     <div class="card ${expanded ? 'expanded' : ''}">
       <div class="card-main">
         <div class="card-cover">
-          ${r.coverImage ? `<img src="${esc(r.coverImage)}" alt="${esc(r.title)}">` : ''}
+          ${r.coverImage ? `<img src="${escHtml(r.coverImage)}" alt="${escHtml(r.title)}">` : ''}
         </div>
         <div class="card-info">
-          <h2><span class="card-title-text">${esc(r.title) || 'Untitled'}</span>${appId ? `<a class="steam-link" href="https://store.steampowered.com/app/${appId}/" target="_blank" rel="noopener noreferrer" title="View on Steam" onclick="event.stopPropagation()">${STEAM_ICON}</a>` : ''}</h2>
+          <h2><span class="card-title-text">${escHtml(r.title) || 'Untitled'}</span>${appId ? `<a class="steam-link" href="https://store.steampowered.com/app/${appId}/" target="_blank" rel="noopener noreferrer" title="View on Steam" onclick="event.stopPropagation()">${STEAM_ICON}</a>` : ''}</h2>
           <span class="badge ${r.recommended ? 'yes' : 'no'}">${r.recommended ? 'Recommended' : 'Not Recommended'}</span>
-          <p class="summary">${esc(r.summary)}</p>
-          <div class="meta">${r.hoursPlayed} hrs &middot; ${r.datePosted ? fmtDate(r.datePosted) : '—'}</div>
-          ${r.tags?.length ? `<div class="tag-list">${r.tags.map(t => `<span class="tag-badge">${esc(t)}</span>`).join('')}</div>` : ''}
+          <p class="summary">${escHtml(r.summary)}</p>
+          <div class="meta">${r.hoursPlayed} hrs &middot; ${r.datePosted ? formatDate(r.datePosted) : '—'}</div>
+          ${r.tags?.length ? `<div class="tag-list">${r.tags.map(t => `<span class="tag-badge">${escHtml(t)}</span>`).join('')}</div>` : ''}
         </div>
         <div class="card-chevron">${expanded ? '▲' : '▼'}</div>
       </div>
@@ -1184,7 +1151,7 @@ function renderSitePreview(r) {
             <div class="expanded-body">
               ${subTabs ? `
                 <div class="sub-tabs">
-                  ${subTabs.map((st, i) => `<button type="button" class="sub-tab ${i === sitePreviewSubTab ? 'active' : ''}" data-sub-tab="${i}">${esc(st.name)}</button>`).join('')}
+                  ${subTabs.map((st, i) => `<button type="button" class="sub-tab ${i === sitePreviewSubTab ? 'active' : ''}" data-sub-tab="${i}">${escHtml(st.name)}</button>`).join('')}
                 </div>
                 ${renderBBCode(activeSub.content)}
               ` : renderBBCode(activeTab.content)}
@@ -1192,7 +1159,7 @@ function renderSitePreview(r) {
           ` : ''}
           ${showTabs ? `
             <div class="review-tabs">
-              ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${esc(t.id)}">${esc(t.name)}</button>`).join('')}
+              ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${escHtml(t.id)}">${escHtml(t.name)}</button>`).join('')}
             </div>` : ''}
         </div>
       ` : ''}
@@ -1224,13 +1191,17 @@ function renderSitePreview(r) {
   });
 }
 
+function siteReviewUrl(id) {
+  return new URL(`index.html?review=${encodeURIComponent(id)}`, location.href).href;
+}
+
 function renderSteamPreview(r) {
   const yes = r.recommended;
   const hasContent = r.summary || r.body;
 
   document.getElementById('steam-preview').innerHTML = `
     <div class="steam-card">
-      ${r.coverImage ? `<img class="steam-cover" src="${esc(r.coverImage)}" alt="">` : ''}
+      ${r.coverImage ? `<img class="steam-cover" src="${escHtml(r.coverImage)}" alt="">` : ''}
       <div class="steam-rec ${yes ? 'yes' : 'no'}">
         <span class="steam-thumb">${yes ? '👍' : '👎'}</span>
         <div>
@@ -1240,13 +1211,13 @@ function renderSteamPreview(r) {
       </div>
       <div class="steam-meta">
         ${r.hoursPlayed} hrs on record &nbsp;&middot;&nbsp;
-        Posted: ${r.datePosted ? fmtDate(r.datePosted) : '—'}
+        Posted: ${r.datePosted ? formatDate(r.datePosted) : '—'}
       </div>
       <div class="steam-body">
         ${hasContent ? `
-          ${r.summary ? `<p><em>${esc(r.summary)}</em></p>` : ''}
-          ${r.tags?.length ? `<p>${r.tags.map(t => esc(t)).join(' &middot; ')}</p>` : ''}
+          ${r.summary ? `<span class="bb-h1">${escHtml(r.summary)}</span><br>` : ''}
           ${r.body    ? renderBBCode(r.body) : ''}
+          ${r.id ? `<br><p><a href="${escHtml(siteReviewUrl(r.id))}" target="_blank" rel="noopener noreferrer">${SITE_LINK_TEXT}</a></p>` : ''}
         ` : '<p class="steam-empty">Fill in the form to see the preview.</p>'}
       </div>
     </div>
@@ -1259,8 +1230,9 @@ function copyForSteam() {
   lines.push(`[h1]${r.title}[/h1]`);
   lines.push(`${r.recommended ? '✔ Recommended' : '✘ Not Recommended'} | ${r.hoursPlayed} hours played`);
   lines.push('');
-  if (r.summary) { lines.push(`[i]${r.summary}[/i]`); lines.push(''); }
+  if (r.summary) { lines.push(`[h1]${r.summary}[/h1]`); lines.push(''); }
   if (r.body)    { lines.push(r.body); lines.push(''); }
+  if (r.id)      { lines.push(`<br>[url=${siteReviewUrl(r.id)}]${SITE_LINK_TEXT}[/url]`); }
 
   navigator.clipboard.writeText(lines.join('\n')).then(() => {
     const btn = document.getElementById('copy-steam-btn');
@@ -1278,8 +1250,6 @@ function toggleKeyVis() {
 }
 
 // ── Steam library ─────────────────────────────────────────────────────────────
-
-const PROXY = url => 'https://corsproxy.io/?' + encodeURIComponent(url);
 
 async function resolveSteamId(input) {
   if (/^\d{17}$/.test(input)) return input;
@@ -1338,7 +1308,7 @@ function filterGames() {
   box.innerHTML = hits.map(g => `
     <div class="game-result" onmousedown="selectGame(${g.appid})">
       <img src="https://cdn.cloudflare.steamstatic.com/steam/apps/${g.appid}/capsule_sm_120.jpg" alt="">
-      <span class="g-name">${esc(g.name)}</span>
+      <span class="g-name">${escHtml(g.name)}</span>
       <span class="g-hrs">${Math.round(g.playtime_forever / 60)} hrs</span>
     </div>
   `).join('');
@@ -1382,12 +1352,6 @@ function setSt(id, msg, isErr) {
   el.className = 'status' + (isErr ? ' err' : (msg ? ' ok' : ''));
   if (!isErr && msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 4000);
 }
-
-const v   = id => document.getElementById(id).value.trim();
-const set = (id, val) => { document.getElementById(id).value = val; };
-const esc = str => String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const fmtDate = str => new Date(str).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' });
-const today = () => new Date().toISOString().slice(0, 10);
 
 function b64encode(str) {
   const bytes = new TextEncoder().encode(str);

@@ -390,6 +390,21 @@ header {
   margin-bottom: 0.5rem;
 }
 
+.card-permalink {
+  margin-top: 1.25rem;
+  font-size: 0.78rem;
+}
+
+.card-permalink a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.card-permalink a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 .card-expanded ul {
   list-style: none;
   padding: 0;
