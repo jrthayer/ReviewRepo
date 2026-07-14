@@ -108,10 +108,13 @@ header {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  margin-bottom: 2.25rem;
   cursor: pointer;
   transition: border-color 0.2s;
   position: relative;
+}
+
+.card:not(:first-of-type){
+  margin-top: 3rem;
 }
 
 .card:has(.review-tabs) {
@@ -121,6 +124,10 @@ header {
 .card:hover,
 .card.expanded {
   border-color: var(--accent);
+}
+
+.card.expanded {
+  margin-top: 3rem;
 }
 
 .card-main {
@@ -217,6 +224,32 @@ header {
 .expanded-body {
   line-height: 1.8;
   margin-bottom: 1rem;
+}
+
+.sub-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.sub-tab {
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.sub-tab:hover { color: var(--text); }
+.sub-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 
 .expanded-body .bb-h1 {

@@ -2,6 +2,7 @@ let reviews = [];
 let expandedId = null;
 let activeTag = null;
 let expandedBodyTab = 'steam';
+let expandedSubTab = 0;
 
 const STEAM_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
   <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.3"/>
@@ -64,10 +65,12 @@ function render() {
     const appId = steamAppId(r.coverImage);
     const bodyTabs = [
       { id: 'steam', name: 'Steam Review', content: r.body },
-      ...(r.tabs || []),
-    ].filter(t => t.content);
-    const showTabs  = bodyTabs.length > 1;
+      ...(r.tabs || []).filter(t => t.content),
+    ];
+    const showTabs  = true;
     const activeTab = bodyTabs.find(t => t.id === expandedBodyTab) || bodyTabs[0];
+    const subTabs   = expanded ? splitSubTabs(activeTab.content) : null;
+    const activeSub = subTabs ? subTabs[Math.min(expandedSubTab, subTabs.length - 1)] : null;
     return `
       <div class="card ${expanded ? 'expanded' : ''}" data-id="${escHtml(r.id)}">
         <div class="card-main">
@@ -85,7 +88,16 @@ function render() {
         </div>
         ${expanded ? `
           <div class="card-expanded">
-            ${bodyTabs.length ? `<div class="expanded-body">${renderBBCode(activeTab.content)}</div>` : ''}
+            ${bodyTabs.length ? `
+              <div class="expanded-body">
+                ${subTabs ? `
+                  <div class="sub-tabs">
+                    ${subTabs.map((st, i) => `<button type="button" class="sub-tab ${i === expandedSubTab ? 'active' : ''}" data-sub-tab="${i}">${escHtml(st.name)}</button>`).join('')}
+                  </div>
+                  ${renderBBCode(activeSub.content)}
+                ` : renderBBCode(activeTab.content)}
+              </div>
+            ` : ''}
             ${r.pros?.length ? `
               <section>
                 <h3>Pros</h3>
@@ -116,6 +128,7 @@ function render() {
       const id = card.dataset.id;
       expandedId = expandedId === id ? null : id;
       expandedBodyTab = 'steam';
+      expandedSubTab = 0;
       render();
     });
   });
@@ -123,7 +136,19 @@ function render() {
   app.querySelectorAll('.review-tab').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
+      if (btn.dataset.reviewTab === expandedBodyTab) return;
       expandedBodyTab = btn.dataset.reviewTab;
+      expandedSubTab = 0;
+      render();
+    });
+  });
+
+  app.querySelectorAll('.sub-tab').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const idx = Number(btn.dataset.subTab);
+      if (idx === expandedSubTab) return;
+      expandedSubTab = idx;
       render();
     });
   });
@@ -133,6 +158,17 @@ function escHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function splitSubTabs(raw) {
+  if (!raw) return null;
+  const re = /\[tab=([^\]]+)\]([\s\S]*?)\[\/tab\]/gi;
+  const tabs = [];
+  let m;
+  while ((m = re.exec(raw))) {
+    tabs.push({ name: m[1].trim(), content: m[2].trim() });
+  }
+  return tabs.length ? tabs : null;
 }
 
 function renderBBCode(raw) {

@@ -521,6 +521,8 @@
             <button type="button" onclick="applyFormat('table')" title="Insert table">Table</button>
             <button type="button" onclick="applyFormat('hr')" title="Horizontal rule">&mdash;</button>
             <button type="button" onclick="applyFormat('noparse')" title="Raw text (ignore formatting)">Raw</button>
+            <span class="format-toolbar-sep"></span>
+            <button type="button" onclick="applyFormat('tab')" title="Nested tab section">Tab</button>
           </div>
           <textarea id="f-review-text" rows="5" placeholder="Main review text..." oninput="onReviewTextInput()"></textarea>
         </div>
@@ -838,6 +840,12 @@ function applyFormat(type) {
     insertText = `[noparse]${inner}[/noparse]`;
     selectFrom = start + '[noparse]'.length;
     selectTo = selectFrom + inner.length;
+  } else if (type === 'tab') {
+    const name = 'Tab';
+    const inner = selected || 'text';
+    insertText = `[tab=${name}]${inner}[/tab]`;
+    selectFrom = start + '[tab='.length;
+    selectTo = selectFrom + name.length;
   } else {
     const [open, close] = FORMAT_TAGS[type];
     const inner = selected || 'text';
@@ -850,6 +858,17 @@ function applyFormat(type) {
   textarea.focus();
   textarea.setSelectionRange(selectFrom, selectTo);
   onReviewTextInput();
+}
+
+function splitSubTabs(raw) {
+  if (!raw) return null;
+  const re = /\[tab=([^\]]+)\]([\s\S]*?)\[\/tab\]/gi;
+  const tabs = [];
+  let m;
+  while ((m = re.exec(raw))) {
+    tabs.push({ name: m[1].trim(), content: m[2].trim() });
+  }
+  return tabs.length ? tabs : null;
 }
 
 function renderBBCode(raw) {
@@ -952,22 +971,41 @@ function startRenameTab(e, id) {
   e.stopPropagation();
   const tab = extraTabs.find(t => t.id === id);
   if (!tab) return;
-  const label = e.target.closest('.form-tab-label');
-  if (!label) return;
+  // The tab chip is a <button>, and a nested <input> inside a <button> is invalid
+  // HTML content model. Some browsers/platform accessibility layers treat Space as
+  // "activate the button" in that case instead of typing a space into the input,
+  // which immediately blurs (and thus closes) the rename field. Swap the whole
+  // chip for a non-button wrapper while editing so Space behaves like a normal key.
+  const oldBtn = e.target.closest('.form-tab');
+  if (!oldBtn) return;
+
+  const wrapper = document.createElement('span');
+  wrapper.className = 'form-tab active';
+
   const input = document.createElement('input');
   input.type = 'text';
   input.value = tab.name;
   input.className = 'form-tab-rename-input';
   input.onclick = ev => ev.stopPropagation();
   input.onkeydown = ev => {
+    ev.stopPropagation();
     if (ev.key === 'Enter') input.blur();
     if (ev.key === 'Escape') { input.value = tab.name; input.blur(); }
   };
   input.onblur = () => {
     tab.name = input.value.trim() || tab.name;
     renderReviewTabs();
+    updatePreview();
   };
-  label.replaceWith(input);
+
+  const closeBtn = document.createElement('span');
+  closeBtn.className = 'form-tab-close';
+  closeBtn.textContent = '×';
+  closeBtn.onclick = ev => deleteReviewTab(ev, id);
+
+  wrapper.appendChild(input);
+  wrapper.appendChild(closeBtn);
+  oldBtn.replaceWith(wrapper);
   input.focus();
   input.select();
 }
@@ -1093,6 +1131,7 @@ function onTagKeydown(e) {
 // ── Preview ───────────────────────────────────────────────────────────────────
 let sitePreviewExpanded = true;
 let sitePreviewBodyTab  = 'steam';
+let sitePreviewSubTab   = 0;
 
 function updatePreview() {
   const r = getForm();
@@ -1117,10 +1156,12 @@ function renderSitePreview(r) {
   const appId = steamAppId(r.coverImage);
   const bodyTabs = [
     { id: 'steam', name: 'Steam Review', content: r.body },
-    ...(r.tabs || []),
-  ].filter(t => t.content);
-  const showTabs  = bodyTabs.length > 1;
+    ...(r.tabs || []).filter(t => t.content),
+  ];
+  const showTabs  = true;
   const activeTab = bodyTabs.find(t => t.id === sitePreviewBodyTab) || bodyTabs[0];
+  const subTabs   = expanded ? splitSubTabs(activeTab.content) : null;
+  const activeSub = subTabs ? subTabs[Math.min(sitePreviewSubTab, subTabs.length - 1)] : null;
 
   document.getElementById('site-preview').innerHTML = `
     <div class="card ${expanded ? 'expanded' : ''}">
@@ -1139,7 +1180,16 @@ function renderSitePreview(r) {
       </div>
       ${expanded ? `
         <div class="card-expanded">
-          ${bodyTabs.length ? `<div class="expanded-body">${renderBBCode(activeTab.content)}</div>` : ''}
+          ${bodyTabs.length ? `
+            <div class="expanded-body">
+              ${subTabs ? `
+                <div class="sub-tabs">
+                  ${subTabs.map((st, i) => `<button type="button" class="sub-tab ${i === sitePreviewSubTab ? 'active' : ''}" data-sub-tab="${i}">${esc(st.name)}</button>`).join('')}
+                </div>
+                ${renderBBCode(activeSub.content)}
+              ` : renderBBCode(activeTab.content)}
+            </div>
+          ` : ''}
           ${showTabs ? `
             <div class="review-tabs">
               ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${esc(t.id)}">${esc(t.name)}</button>`).join('')}
@@ -1151,12 +1201,24 @@ function renderSitePreview(r) {
   document.querySelector('#site-preview .card-main').onclick = () => {
     sitePreviewExpanded = !sitePreviewExpanded;
     sitePreviewBodyTab = 'steam';
+    sitePreviewSubTab = 0;
     renderSitePreview(getForm());
   };
   document.querySelectorAll('#site-preview .review-tab').forEach(btn => {
     btn.onclick = e => {
       e.stopPropagation();
+      if (btn.dataset.reviewTab === sitePreviewBodyTab) return;
       sitePreviewBodyTab = btn.dataset.reviewTab;
+      sitePreviewSubTab = 0;
+      renderSitePreview(getForm());
+    };
+  });
+  document.querySelectorAll('#site-preview .sub-tab').forEach(btn => {
+    btn.onclick = e => {
+      e.stopPropagation();
+      const idx = Number(btn.dataset.subTab);
+      if (idx === sitePreviewSubTab) return;
+      sitePreviewSubTab = idx;
       renderSitePreview(getForm());
     };
   });
