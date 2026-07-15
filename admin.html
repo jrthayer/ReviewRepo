@@ -288,6 +288,10 @@
 
     #bbcode-warnings { font-size: 0.78rem; color: var(--amber); min-height: 1.1em; margin-top: 0.3rem; }
 
+    #import-panel { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+    #import-panel textarea { min-height: 280px; font-size: 0.8rem; }
+    .import-actions { display: flex; align-items: center; gap: 0.6rem; }
+
     /* ── Tag input ── */
     #tag-input-wrap { position: relative; }
     .tag-chips {
@@ -656,7 +660,18 @@
           <button type="button" class="danger sm" onclick="confirmDeleteReview()">Yes, delete</button>
           <button type="button" class="secondary sm" onclick="cancelDeleteReview()">Cancel</button>
         </span>
+        <button type="button" class="secondary" id="export-btn" onclick="exportReview()" title="Copy the whole review as plain text, e.g. to paste into a word processor for spelling/grammar checks">Export</button>
+        <button type="button" class="secondary" id="import-btn" onclick="startImportReview()" title="Paste back an edited export to update this review">Import</button>
         <span id="save-status" class="status"></span>
+      </div>
+
+      <div id="import-panel" style="display:none">
+        <textarea id="import-text" rows="14" placeholder="Paste the exported review text here..." spellcheck="false"></textarea>
+        <div class="import-actions">
+          <button type="button" onclick="confirmImportReview()">Apply Import</button>
+          <button type="button" class="secondary" onclick="cancelImportReview()">Cancel</button>
+          <span id="import-status" class="status"></span>
+        </div>
       </div>
 
     </form>
@@ -1925,6 +1940,116 @@ function copyForSteam() {
     btn.textContent = 'Copied!';
     setTimeout(() => { btn.textContent = 'Copy for Steam'; }, 2000);
   });
+}
+
+// ── Export / import (round-trip the whole review as plain text, e.g. through a
+// word processor's spelling/grammar checker) ──────────────────────────────────
+function serializeReviewForExport(r) {
+  const lines = [
+    `Title: ${r.title || ''}`,
+    `Summary: ${r.summary || ''}`,
+    `Recommended: ${r.recommended ? 'Yes' : 'No'}`,
+    `Hours Played: ${r.hoursPlayed ?? 0}`,
+    `Date Posted: ${r.datePosted || ''}`,
+    `Cover Image: ${r.coverImage || ''}`,
+    `Tags: ${(r.tags || []).join(', ')}`,
+    '',
+    '=== Steam Review ===',
+    r.body || '',
+  ];
+  for (const t of r.tabs || []) {
+    lines.push('', `=== Tab: ${t.name} ===`, t.content || '');
+  }
+  return lines.join('\n');
+}
+
+function exportReview() {
+  const text = serializeReviewForExport(getForm());
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('export-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Export'; }, 2000);
+  });
+}
+
+function parseReviewExport(text) {
+  const normalized = text.replace(/\r\n/g, '\n');
+  const sectionRe = /^===\s*(.+?)\s*===[ \t]*$/gm;
+  const matches = [...normalized.matchAll(sectionRe)];
+  const headerText = matches.length ? normalized.slice(0, matches[0].index) : normalized;
+
+  const fields = {};
+  headerText.split('\n').forEach(line => {
+    const m = line.match(/^([^:]+):\s*(.*)$/);
+    if (m) fields[m[1].trim().toLowerCase()] = m[2].trim();
+  });
+
+  const sections = matches.map((m, i) => {
+    const start = m.index + m[0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index : normalized.length;
+    return { name: m[1].trim(), content: normalized.slice(start, end).replace(/^\n+/, '').replace(/\n+$/, '') };
+  });
+
+  return { fields, sections };
+}
+
+function startImportReview() {
+  document.getElementById('import-btn').style.display = 'none';
+  document.getElementById('import-panel').style.display = '';
+  setSt('import-status', '', false);
+  const textarea = document.getElementById('import-text');
+  textarea.value = '';
+  textarea.focus();
+}
+
+function cancelImportReview() {
+  document.getElementById('import-btn').style.display = '';
+  document.getElementById('import-panel').style.display = 'none';
+  document.getElementById('import-text').value = '';
+  setSt('import-status', '', false);
+}
+
+function confirmImportReview() {
+  const text = document.getElementById('import-text').value;
+  const { fields, sections } = parseReviewExport(text);
+  if (!sections.length) { setSt('import-status', 'Could not find any "=== Section ===" markers in the pasted text — paste the text produced by Export, unmodified apart from your edits.', true); return; }
+
+  const steamSection = sections.find(s => /^steam review$/i.test(s.name));
+  const tabSections  = sections.filter(s => s !== steamSection);
+
+  set('f-title', fields['title'] || '');
+  syncId();
+  set('f-summary', fields['summary'] || '');
+  set('f-cover', fields['cover image'] || '');
+  set('f-hours', fields['hours played'] || '0');
+  set('f-date', fields['date posted'] || '');
+
+  const recommended = (fields['recommended'] || '').trim().toLowerCase() !== 'no';
+  const radio = document.querySelector(`input[name="recommended"][value="${recommended}"]`);
+  if (radio) radio.checked = true;
+
+  currentTags = (fields['tags'] || '').split(',').map(t => t.trim()).filter(Boolean);
+  renderTags();
+
+  steamBody = steamSection ? steamSection.content : '';
+  extraTabs = tabSections.map((s, i) => ({
+    id: `tab-${Date.now()}-${i}`,
+    name: s.name.replace(/^tab:\s*/i, '').trim() || `Tab ${i + 1}`,
+    content: s.content,
+  }));
+
+  activeReviewTab = 'steam';
+  activeSubTabs = parseSubTabsForEditing(steamBody);
+  activeSubTabId = activeSubTabs[0]?.id || null;
+  set('f-review-text', activeSubTabId ? activeSubTabs[0].content : steamBody);
+  renderReviewTabs();
+  renderSubTabBar();
+  sitePreviewBodyTab = 'steam';
+  syncSitePreviewToActiveSubTab();
+  updatePreview();
+
+  cancelImportReview();
+  setSt('save-status', 'Imported — review Save when ready.', false);
 }
 
 function toggleKeyVis() {
