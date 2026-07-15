@@ -27,7 +27,7 @@ Two front ends share one data model:
 
 A review is a plain object: `{ id, title, recommended, summary, coverImage, hoursPlayed, datePosted, body, tabs: [{ id, name, content }], tags: [] }`. `body` (and each tab's `content`) is BBCode-ish markup (see below), not HTML.
 
-Reviews are stored as a single JSON array at `data/reviews.json` inside a **GitHub repo the user configures in the admin UI** (Settings → owner/repo/branch/PAT, saved to `localStorage`). `admin.html` reads/writes that file directly through GitHub's REST Contents API (`fetchFile`/`pushFile` in the inline script), base64-encoding/decoding the content (`b64encode`/`b64decode`, UTF-8 safe).
+Reviews are stored as a single JSON array at `data/reviews.json` inside a **GitHub repo the user configures in the admin UI** (Settings → owner/repo/branch/PAT, saved to `localStorage`). `admin.html` reads/writes that file directly through GitHub's REST Contents API, via the generic `ghGetJson(path)`/`ghPutJson(path, data, sha, msg)` helpers (which wrap `ghReq` and base64-encode/decode the content — `b64encode`/`b64decode`, UTF-8 safe). `fetchFile`/`pushFile` are thin wrappers of those two around `data/reviews.json`; `fetchBlocksFile`/`pushBlocksFile` are the same for `data/custom-blocks.json` (see below). Any new GitHub-persisted file should go through `ghGetJson`/`ghPutJson` rather than re-implementing the Contents API calls.
 
 **Important:** the public site (`app.js`) never calls the GitHub API itself. `init()` only reads the `gh_reviews_cache` `localStorage` key, which `admin.html` populates whenever it successfully loads or saves reviews (`cacheReviews()`). So the live site only shows fresh data in whatever browser the admin tool was last used in — there's no server-side or build-time fetch of `data/reviews.json`.
 
@@ -50,6 +50,10 @@ Two distinct, similarly-named tab systems:
 ### Permalinks between the site and Steam
 
 `?review=<id>` on `index.html` auto-expands and scrolls to that card on load (see `init()` in `app.js`). `admin.html`'s `siteReviewUrl(id)` builds that URL, and it's appended (using the shared `SITE_LINK_TEXT` copy) both to the site card itself (`.card-permalink`) and to the Steam-review text/preview — so a posted Steam review links back to the fuller write-up on the site, and the site card links to itself for sharing.
+
+### Custom format blocks
+
+Admin's editor toolbar has a "Blocks ▾" dropdown (`renderCustomBlocks`) of reusable saved text snippets, independent of any single review — e.g. a fully-written `[tab=Name]...[/tab]` section you want to reuse across reviews. "+ Save Block" saves the current textarea selection under a name; clicking a saved block in the dropdown inserts it at the cursor (`insertCustomBlock`), same idea as the built-in toolbar buttons but with user-authored content instead of a fixed template. Blocks are stored the same way reviews are — `data/custom-blocks.json` in the configured GitHub repo, loaded alongside the review list on connect (`loadCustomBlocksList`, called from `loadReviewList`) — not `localStorage`, so they persist across machines/sessions rather than being tied to one browser. Saving/deleting a block requires GitHub to be configured, same restriction as saving/deleting a review.
 
 ### Steam library import
 

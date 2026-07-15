@@ -211,6 +211,46 @@
     .format-toolbar button:hover { border-color: var(--accent); }
     .format-toolbar-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 0.1rem; }
 
+    #save-block-editor { display: inline-flex; gap: 0.3rem; align-items: center; }
+    .save-block-input {
+      background: var(--input-bg); color: var(--text); border: 1px solid var(--accent);
+      border-radius: 4px; padding: 0.25rem 0.6rem; font-size: 0.78rem;
+      width: 9rem;
+    }
+    .save-block-input:focus { outline: none; }
+    #save-block-editor button { padding: 0.25rem 0.5rem !important; min-width: auto !important; }
+
+    .blocks-dropdown-wrap { position: relative; display: inline-flex; }
+    #blocks-dropdown {
+      position: absolute;
+      z-index: 20;
+      top: 100%;
+      left: 0;
+      margin-top: 0.25rem;
+      min-width: 180px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      max-height: 220px;
+      overflow-y: auto;
+      display: none;
+    }
+    #blocks-dropdown.open { display: block; }
+    .blocks-dropdown-item {
+      display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+      padding: 0.35rem 0.4rem 0.35rem 0.6rem;
+      font-size: 0.8rem; font-weight: 400;
+      cursor: pointer;
+    }
+    .blocks-dropdown-item:hover { background: var(--border); }
+    .blocks-dropdown-remove {
+      background: none !important; color: var(--muted); padding: 0 0.3rem !important;
+      font-size: 0.85rem; line-height: 1; border: none !important; min-width: auto !important;
+      border-radius: 50% !important;
+    }
+    .blocks-dropdown-remove:hover { color: var(--text); }
+    .blocks-dropdown-empty { padding: 0.5rem 0.6rem; font-size: 0.78rem; color: var(--muted); }
+
     .review-editor textarea {
       border: none; border-radius: 0; background: transparent;
       display: block; width: 100%;
@@ -220,7 +260,6 @@
     #save-row { display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap; padding-top: 0.25rem; }
     .status { font-size: 0.78rem; }
     .status.ok { color: var(--green); }
-    .status.err { color: var(--red); }
 
     /* ── Tag input ── */
     #tag-input-wrap { position: relative; }
@@ -378,6 +417,29 @@
       font-family: 'Segoe UI', system-ui, sans-serif;
     }
 
+    #error-banner {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      background: var(--red);
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      z-index: 100;
+      transform: translateY(100%);
+      transition: transform 0.2s ease;
+    }
+    #error-banner.visible { transform: translateY(0); }
+    #error-banner-close {
+      background: none !important; color: #fff; padding: 0 0.25rem !important;
+      font-size: 1rem; line-height: 1; min-width: auto !important; opacity: 0.85;
+    }
+    #error-banner-close:hover { opacity: 1; }
+
     @media (max-width: 840px) {
       body { overflow: auto; }
       #workspace { grid-template-columns: 1fr; height: auto; overflow: visible; }
@@ -526,6 +588,19 @@
             <button type="button" onclick="applyFormat('noparse')" title="Raw text (ignore formatting)">Raw</button>
             <span class="format-toolbar-sep"></span>
             <button type="button" onclick="applyFormat('tab')" title="Nested tab section">Tab</button>
+            <span class="format-toolbar-sep"></span>
+            <div class="blocks-dropdown-wrap">
+              <button type="button" onclick="toggleBlocksDropdown(event)" title="Insert a saved block">Blocks &#9662;</button>
+              <div id="blocks-dropdown"></div>
+            </div>
+            <button type="button" id="save-block-btn" onclick="startSaveCustomBlock()" title="Save the selected text as a reusable block">+ Save Block</button>
+            <span id="save-block-editor" style="display:none">
+              <input type="text" id="save-block-name" class="save-block-input" placeholder="Block name..."
+                     onkeydown="onSaveBlockNameKeydown(event)" onblur="cancelSaveCustomBlock()">
+              <button type="button" onmousedown="event.preventDefault()" onclick="confirmSaveCustomBlock()" title="Save block">&check;</button>
+              <button type="button" onmousedown="event.preventDefault()" onclick="cancelSaveCustomBlock()" title="Cancel">&times;</button>
+            </span>
+            <span id="blocks-status" class="status"></span>
           </div>
           <textarea id="f-review-text" rows="5" placeholder="Main review text..." oninput="onReviewTextInput()"></textarea>
         </div>
@@ -554,6 +629,11 @@
 
 </div>
 
+<div id="error-banner">
+  <span id="error-banner-text"></span>
+  <button type="button" id="error-banner-close" onclick="hideError()">&times;</button>
+</div>
+
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
 let reviews          = [];
@@ -569,6 +649,10 @@ let draggedTabId     = null;
 let sitePreviewExpanded = true;
 let sitePreviewBodyTab  = 'steam';
 let sitePreviewSubTab   = 0;
+let customBlocks        = []; // [{ id, name, content }] — reusable saved snippets, shared across all reviews
+let blocksSha           = null;
+let pendingBlockContent = null; // selected text staged while naming a new block
+let errorBannerTimer    = null;
 
 // ── Constants & helpers ────────────────────────────────────────────────────────
 const FORMAT_TAGS = {
@@ -605,10 +689,7 @@ function saveSettings() {
   localStorage.setItem('gh_repo',    v('gh-repo'));
   localStorage.setItem('gh_branch',  v('gh-branch') || 'main');
   localStorage.setItem('gh_token',   v('gh-token'));
-  localStorage.setItem('steam_key',  v('steam-key'));
-  localStorage.setItem('steam_id',   v('steam-id'));
   loadReviewList();
-  if (v('steam-key') && v('steam-id')) loadSteamLibrary();
 }
 
 // ── GitHub API ────────────────────────────────────────────────────────────────
@@ -627,34 +708,59 @@ async function ghReq(url, opts = {}) {
   return res;
 }
 
-async function fetchFile() {
-  const { owner, repo, branch } = getCfg();
-  const res = await ghReq(
-    `https://api.github.com/repos/${owner}/${repo}/contents/data/reviews.json?ref=${branch}`
-  );
-  if (res.status === 404) return { reviews: [], sha: null };
+async function ghCheckRepo() {
+  const { owner, repo } = getCfg();
+  const res = await ghReq(`https://api.github.com/repos/${owner}/${repo}`);
+  if (res.status === 404) throw new Error(`Repo "${owner}/${repo}" not found — check the owner/repo name and that your token has access.`);
   if (!res.ok) { const e = await res.json(); throw new Error(e.message || `GitHub ${res.status}`); }
-  const data = await res.json();
-  return { reviews: JSON.parse(b64decode(data.content)), sha: data.sha };
 }
 
-async function pushFile(list, msg) {
+async function ghGetJson(path) {
   const { owner, repo, branch } = getCfg();
   const res = await ghReq(
-    `https://api.github.com/repos/${owner}/${repo}/contents/data/reviews.json`,
+    `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`
+  );
+  if (res.status === 404) return { data: null, sha: null };
+  if (!res.ok) { const e = await res.json(); throw new Error(e.message || `GitHub ${res.status}`); }
+  const result = await res.json();
+  return { data: JSON.parse(b64decode(result.content)), sha: result.sha };
+}
+
+async function ghPutJson(path, data, sha, msg) {
+  const { owner, repo, branch } = getCfg();
+  const res = await ghReq(
+    `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
     {
       method: 'PUT',
       body: {
-        message: msg || 'Update reviews.json',
-        content: b64encode(JSON.stringify(list, null, 2)),
+        message: msg,
+        content: b64encode(JSON.stringify(data, null, 2)),
         branch,
-        ...(fileSha ? { sha: fileSha } : {}),
+        ...(sha ? { sha } : {}),
       },
     }
   );
   if (!res.ok) { const e = await res.json(); throw new Error(e.message || `GitHub ${res.status}`); }
   const result = await res.json();
-  fileSha = result.content.sha;
+  return result.content.sha;
+}
+
+async function fetchFile() {
+  const { data, sha } = await ghGetJson('data/reviews.json');
+  return { reviews: data || [], sha };
+}
+
+async function pushFile(list, msg) {
+  fileSha = await ghPutJson('data/reviews.json', list, fileSha, msg || 'Update reviews.json');
+}
+
+async function fetchBlocksFile() {
+  const { data, sha } = await ghGetJson('data/custom-blocks.json');
+  return { blocks: data || [], sha };
+}
+
+async function pushBlocksFile(list, msg) {
+  blocksSha = await ghPutJson('data/custom-blocks.json', list, blocksSha, msg || 'Update custom-blocks.json');
 }
 
 // ── Review list ───────────────────────────────────────────────────────────────
@@ -665,13 +771,14 @@ function cacheReviews(list) {
 async function loadReviewList() {
   setSt('settings-status', 'Connecting...', false);
   try {
+    await ghCheckRepo();
     const { reviews: loaded, sha } = await fetchFile();
     reviews = loaded;
     fileSha = sha;
     cacheReviews(reviews);
     renderList();
     setSt('settings-status', `Connected — ${reviews.length} review(s).`, false);
-    document.getElementById('settings').removeAttribute('open');
+    loadCustomBlocksList();
   } catch (e) {
     setSt('settings-status', e.message, true);
   }
@@ -872,6 +979,122 @@ function applyFormat(type) {
   textarea.focus();
   textarea.setSelectionRange(selectFrom, selectTo);
   onReviewTextInput();
+}
+
+// ── Custom format blocks (reusable saved snippets, stored in data/custom-blocks.json) ──
+async function loadCustomBlocksList() {
+  try {
+    const { blocks, sha } = await fetchBlocksFile();
+    customBlocks = blocks;
+    blocksSha = sha;
+    renderCustomBlocks();
+  } catch (e) {
+    setSt('blocks-status', e.message, true);
+  }
+}
+
+function renderCustomBlocks() {
+  const el = document.getElementById('blocks-dropdown');
+  el.innerHTML = customBlocks.length
+    ? customBlocks.map(b => `
+        <div class="blocks-dropdown-item" onclick="insertCustomBlock('${b.id}')">
+          <span>${escHtml(b.name)}</span>
+          <button type="button" class="blocks-dropdown-remove" onclick="deleteCustomBlock(event, '${b.id}')" title="Delete this block">&times;</button>
+        </div>
+      `).join('')
+    : '<div class="blocks-dropdown-empty">No saved blocks yet.</div>';
+}
+
+function toggleBlocksDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('blocks-dropdown').classList.toggle('open');
+}
+
+function closeBlocksDropdown() {
+  document.getElementById('blocks-dropdown').classList.remove('open');
+}
+
+function startSaveCustomBlock() {
+  const textarea = document.getElementById('f-review-text');
+  const selected = textarea.value.slice(textarea.selectionStart, textarea.selectionEnd);
+  if (!selected.trim()) { setSt('blocks-status', 'Select the text you want to save as a block first.', true); return; }
+
+  pendingBlockContent = selected;
+  document.getElementById('save-block-btn').style.display = 'none';
+  document.getElementById('save-block-editor').style.display = '';
+  const input = document.getElementById('save-block-name');
+  input.value = '';
+  input.focus();
+}
+
+function cancelSaveCustomBlock() {
+  pendingBlockContent = null;
+  document.getElementById('save-block-btn').style.display = '';
+  document.getElementById('save-block-editor').style.display = 'none';
+}
+
+function onSaveBlockNameKeydown(e) {
+  if (e.key === 'Enter') { e.preventDefault(); confirmSaveCustomBlock(); }
+  if (e.key === 'Escape') { e.preventDefault(); cancelSaveCustomBlock(); }
+}
+
+async function confirmSaveCustomBlock() {
+  const name = document.getElementById('save-block-name').value.trim();
+  if (!name) return;
+  const content = pendingBlockContent;
+  cancelSaveCustomBlock();
+
+  const { owner, repo, token } = getCfg();
+  if (!owner || !repo || !token) { setSt('blocks-status', 'Configure GitHub settings first.', true); return; }
+
+  setSt('blocks-status', 'Saving...', false);
+  try {
+    const { blocks: latest, sha } = await fetchBlocksFile();
+    blocksSha = sha;
+    latest.push({ id: `block-${Date.now()}`, name, content });
+    await pushBlocksFile(latest, `Add block: ${name}`);
+    customBlocks = latest;
+    renderCustomBlocks();
+    setSt('blocks-status', 'Saved!', false);
+  } catch (e) {
+    setSt('blocks-status', e.message, true);
+  }
+}
+
+function insertCustomBlock(id) {
+  const block = customBlocks.find(b => b.id === id);
+  if (!block) return;
+
+  const textarea = document.getElementById('f-review-text');
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const value = textarea.value;
+
+  textarea.value = value.slice(0, start) + block.content + value.slice(end);
+  textarea.focus();
+  const cursor = start + block.content.length;
+  textarea.setSelectionRange(cursor, cursor);
+  onReviewTextInput();
+  closeBlocksDropdown();
+}
+
+async function deleteCustomBlock(e, id) {
+  e.stopPropagation();
+  const block = customBlocks.find(b => b.id === id);
+  if (!block) return;
+  if (!confirm(`Delete "${block.name}"? This cannot be undone.`)) return;
+
+  setSt('blocks-status', 'Deleting...', false);
+  try {
+    const { blocks: latest, sha } = await fetchBlocksFile();
+    blocksSha = sha;
+    await pushBlocksFile(latest.filter(b => b.id !== id), `Delete block: ${block.name}`);
+    customBlocks = latest.filter(b => b.id !== id);
+    renderCustomBlocks();
+    setSt('blocks-status', 'Deleted.', false);
+  } catch (e) {
+    setSt('blocks-status', e.message, true);
+  }
 }
 
 function syncActiveTabContent() {
@@ -1310,10 +1533,23 @@ function syncId() {
 }
 
 function setSt(id, msg, isErr) {
+  if (isErr) { showError(msg); return; }
   const el = document.getElementById(id);
   el.textContent = msg;
-  el.className = 'status' + (isErr ? ' err' : (msg ? ' ok' : ''));
-  if (!isErr && msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 4000);
+  el.className = 'status' + (msg ? ' ok' : '');
+  if (msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2000);
+}
+
+function showError(msg) {
+  document.getElementById('error-banner-text').textContent = msg;
+  document.getElementById('error-banner').classList.toggle('visible', !!msg);
+  clearTimeout(errorBannerTimer);
+  if (msg) errorBannerTimer = setTimeout(hideError, 5000);
+}
+
+function hideError() {
+  clearTimeout(errorBannerTimer);
+  document.getElementById('error-banner').classList.remove('visible');
 }
 
 function b64encode(str) {
@@ -1344,6 +1580,7 @@ function b64decode(b64) {
   if (steamId)  set('steam-id',  steamId);
 
   set('f-date', today());
+  renderCustomBlocks();
   renderReviewTabs();
   updatePreview();
   renderList();
@@ -1360,6 +1597,9 @@ function b64decode(b64) {
     }
     if (!e.target.closest('#tag-input-wrap')) {
       closeTagSuggestions();
+    }
+    if (!e.target.closest('.blocks-dropdown-wrap')) {
+      closeBlocksDropdown();
     }
   });
 })();
