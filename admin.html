@@ -193,6 +193,9 @@
     .form-tab-close:hover { color: var(--text); }
     .form-tab-add { padding: 0.35rem 0.65rem; font-weight: 700; }
 
+    #save-tab-editor { display: inline-flex; gap: 0.3rem; align-items: center; }
+    #save-tab-editor button { padding: 0.25rem 0.5rem !important; min-width: auto !important; }
+
     .review-editor {
       background: var(--input-bg); border: 1px solid var(--border);
       border-radius: 4px; border-top-left-radius: 0; overflow: hidden;
@@ -220,8 +223,12 @@
     .save-block-input:focus { outline: none; }
     #save-block-editor button { padding: 0.25rem 0.5rem !important; min-width: auto !important; }
 
-    .blocks-dropdown-wrap { position: relative; display: inline-flex; }
-    #blocks-dropdown {
+    #link-editor { display: inline-flex; gap: 0.3rem; align-items: center; }
+    #link-editor button { padding: 0.25rem 0.5rem !important; min-width: auto !important; }
+    #link-url { width: 12rem; }
+
+    .dropdown-wrap { position: relative; display: inline-flex; }
+    .dropdown-menu {
       position: absolute;
       z-index: 20;
       top: 100%;
@@ -235,21 +242,23 @@
       overflow-y: auto;
       display: none;
     }
-    #blocks-dropdown.open { display: block; }
-    .blocks-dropdown-item {
+    .dropdown-menu.open { display: block; }
+    .dropdown-item {
       display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
       padding: 0.35rem 0.4rem 0.35rem 0.6rem;
       font-size: 0.8rem; font-weight: 400;
       cursor: pointer;
     }
-    .blocks-dropdown-item:hover { background: var(--border); }
-    .blocks-dropdown-remove {
+    .dropdown-item:hover { background: var(--border); }
+    .dropdown-item-confirm { cursor: default; }
+    .dropdown-item-confirm:hover { background: none; }
+    .dropdown-remove {
       background: none !important; color: var(--muted); padding: 0 0.3rem !important;
       font-size: 0.85rem; line-height: 1; border: none !important; min-width: auto !important;
       border-radius: 50% !important;
     }
-    .blocks-dropdown-remove:hover { color: var(--text); }
-    .blocks-dropdown-empty { padding: 0.5rem 0.6rem; font-size: 0.78rem; color: var(--muted); }
+    .dropdown-remove:hover { color: var(--text); }
+    .dropdown-empty { padding: 0.5rem 0.6rem; font-size: 0.78rem; color: var(--muted); }
 
     .review-editor textarea {
       border: none; border-radius: 0; background: transparent;
@@ -582,16 +591,22 @@
             <button type="button" onclick="applyFormat('quote')" title="Quote">&ldquo;Quote&rdquo;</button>
             <button type="button" onclick="applyFormat('code')" title="Code block">&lt;/&gt;</button>
             <button type="button" onclick="applyFormat('spoiler')" title="Spoiler">Spoiler</button>
-            <button type="button" onclick="applyFormat('url')" title="Insert link">Link</button>
+            <button type="button" id="link-btn" onclick="startInsertLink()" title="Insert link">Link</button>
+            <span id="link-editor" style="display:none">
+              <input type="text" id="link-url" class="save-block-input" placeholder="https://..."
+                     onkeydown="onLinkUrlKeydown(event)" onblur="cancelInsertLink()">
+              <button type="button" onmousedown="event.preventDefault()" onclick="confirmInsertLink()" title="Insert link">&check;</button>
+              <button type="button" onmousedown="event.preventDefault()" onclick="cancelInsertLink()" title="Cancel">&times;</button>
+            </span>
             <button type="button" onclick="applyFormat('table')" title="Insert table">Table</button>
             <button type="button" onclick="applyFormat('hr')" title="Horizontal rule">&mdash;</button>
             <button type="button" onclick="applyFormat('noparse')" title="Raw text (ignore formatting)">Raw</button>
             <span class="format-toolbar-sep"></span>
             <button type="button" onclick="applyFormat('tab')" title="Nested tab section">Tab</button>
             <span class="format-toolbar-sep"></span>
-            <div class="blocks-dropdown-wrap">
+            <div class="dropdown-wrap blocks-dropdown-wrap">
               <button type="button" onclick="toggleBlocksDropdown(event)" title="Insert a saved block">Blocks &#9662;</button>
-              <div id="blocks-dropdown"></div>
+              <div id="blocks-dropdown" class="dropdown-menu"></div>
             </div>
             <button type="button" id="save-block-btn" onclick="startSaveCustomBlock()" title="Save the selected text as a reusable block">+ Save Block</button>
             <span id="save-block-editor" style="display:none">
@@ -601,6 +616,15 @@
               <button type="button" onmousedown="event.preventDefault()" onclick="cancelSaveCustomBlock()" title="Cancel">&times;</button>
             </span>
             <span id="blocks-status" class="status"></span>
+            <span class="format-toolbar-sep"></span>
+            <button type="button" id="save-tab-btn" onclick="startSaveCustomTab()" title="Save the active tab as a reusable saved tab">+ Save Tab</button>
+            <span id="save-tab-editor" style="display:none">
+              <input type="text" id="save-tab-name" class="save-block-input" placeholder="Tab name..."
+                     onkeydown="onSaveTabNameKeydown(event)" onblur="cancelSaveCustomTab()">
+              <button type="button" onmousedown="event.preventDefault()" onclick="confirmSaveCustomTab()" title="Save tab">&check;</button>
+              <button type="button" onmousedown="event.preventDefault()" onclick="cancelSaveCustomTab()" title="Cancel">&times;</button>
+            </span>
+            <span id="tabs-status" class="status"></span>
           </div>
           <textarea id="f-review-text" rows="5" placeholder="Main review text..." oninput="onReviewTextInput()"></textarea>
         </div>
@@ -608,7 +632,12 @@
 
       <div id="save-row">
         <button type="button" id="save-btn" onclick="saveReview()">Save</button>
-        <button type="button" id="delete-btn" class="danger" style="display:none" onclick="deleteReview()">Delete</button>
+        <button type="button" id="delete-btn" class="danger" style="display:none" onclick="startDeleteReview()">Delete</button>
+        <span id="delete-confirm" style="display:none">
+          Delete this review?
+          <button type="button" class="danger sm" onclick="confirmDeleteReview()">Yes, delete</button>
+          <button type="button" class="secondary sm" onclick="cancelDeleteReview()">Cancel</button>
+        </span>
         <span id="save-status" class="status"></span>
       </div>
 
@@ -652,7 +681,13 @@ let sitePreviewSubTab   = 0;
 let customBlocks        = []; // [{ id, name, content }] — reusable saved snippets, shared across all reviews
 let blocksSha           = null;
 let pendingBlockContent = null; // selected text staged while naming a new block
+let confirmingBlockDeleteId = null; // saved-block id currently showing its inline "delete?" confirmation
+let pendingLinkSelection = null; // { start, end, text } captured when the Link button was clicked
 let errorBannerTimer    = null;
+let customTabs          = []; // [{ id, name, content }] — saved tab templates, offered from the "+" tab dropdown
+let tabsSha             = null;
+let pendingTabContent   = null; // content of the active tab staged while naming a new saved tab
+let confirmingTabDeleteId = null; // saved-tab id currently showing its inline "delete?" confirmation
 
 // ── Constants & helpers ────────────────────────────────────────────────────────
 const FORMAT_TAGS = {
@@ -763,6 +798,15 @@ async function pushBlocksFile(list, msg) {
   blocksSha = await ghPutJson('data/custom-blocks.json', list, blocksSha, msg || 'Update custom-blocks.json');
 }
 
+async function fetchTabsFile() {
+  const { data, sha } = await ghGetJson('data/custom-tabs.json');
+  return { tabs: data || [], sha };
+}
+
+async function pushTabsFile(list, msg) {
+  tabsSha = await ghPutJson('data/custom-tabs.json', list, tabsSha, msg || 'Update custom-tabs.json');
+}
+
 // ── Review list ───────────────────────────────────────────────────────────────
 function cacheReviews(list) {
   localStorage.setItem('gh_reviews_cache', JSON.stringify(list));
@@ -779,6 +823,7 @@ async function loadReviewList() {
     renderList();
     setSt('settings-status', `Connected — ${reviews.length} review(s).`, false);
     loadCustomBlocksList();
+    loadCustomTabsList();
   } catch (e) {
     setSt('settings-status', e.message, true);
   }
@@ -806,6 +851,7 @@ function loadReview(id) {
   setForm(r);
   document.getElementById('form-heading').textContent = 'Edit Review';
   document.getElementById('delete-btn').style.display = 'inline-block';
+  document.getElementById('delete-confirm').style.display = 'none';
   renderList();
   updatePreview();
 }
@@ -815,6 +861,7 @@ function newReview() {
   clearForm();
   document.getElementById('form-heading').textContent = 'New Review';
   document.getElementById('delete-btn').style.display = 'none';
+  document.getElementById('delete-confirm').style.display = 'none';
   setSt('save-status', '', false);
   renderList();
   updatePreview();
@@ -849,14 +896,21 @@ async function saveReview() {
   }
 }
 
-async function deleteReview() {
+function startDeleteReview() {
   if (!editingId) return;
+  document.getElementById('delete-btn').style.display = 'none';
+  document.getElementById('delete-confirm').style.display = '';
+}
 
-  const title = reviews.find(r => r.id === editingId)?.title || editingId;
-  if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
+function cancelDeleteReview() {
+  document.getElementById('delete-btn').style.display = 'inline-block';
+  document.getElementById('delete-confirm').style.display = 'none';
+}
 
-  const btn = document.getElementById('delete-btn');
-  btn.disabled = true;
+async function confirmDeleteReview() {
+  if (!editingId) return;
+  document.getElementById('delete-confirm').style.display = 'none';
+
   setSt('save-status', 'Deleting...', false);
   try {
     const { reviews: latest, sha } = await fetchFile();
@@ -868,8 +922,7 @@ async function deleteReview() {
     setSt('save-status', 'Deleted.', false);
   } catch (e) {
     setSt('save-status', e.message, true);
-  } finally {
-    btn.disabled = false;
+    document.getElementById('delete-btn').style.display = 'inline-block';
   }
 }
 
@@ -942,13 +995,6 @@ function applyFormat(type) {
     insertText = `[${type}]\n${items.map(i => `[*] ${i}`).join('\n')}\n[/${type}]`;
     selectFrom = start;
     selectTo = start + insertText.length;
-  } else if (type === 'url') {
-    const url = prompt('Link URL (must start with http:// or https://):', 'https://');
-    if (!url) return;
-    const text = selected || 'link text';
-    insertText = `[url=${url}]${text}[/url]`;
-    selectFrom = start + `[url=${url}]`.length;
-    selectTo = selectFrom + text.length;
   } else if (type === 'table') {
     insertText = '[table]\n[tr]\n[th]Header 1[/th]\n[th]Header 2[/th]\n[/tr]\n[tr]\n[td]Cell 1[/td]\n[td]Cell 2[/td]\n[/tr]\n[/table]';
     selectFrom = start;
@@ -981,6 +1027,48 @@ function applyFormat(type) {
   onReviewTextInput();
 }
 
+function startInsertLink() {
+  const textarea = document.getElementById('f-review-text');
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  pendingLinkSelection = { start, end, text: textarea.value.slice(start, end) || 'link text' };
+
+  document.getElementById('link-btn').style.display = 'none';
+  document.getElementById('link-editor').style.display = '';
+  const input = document.getElementById('link-url');
+  input.value = 'https://';
+  input.focus();
+  input.select();
+}
+
+function cancelInsertLink() {
+  pendingLinkSelection = null;
+  document.getElementById('link-btn').style.display = '';
+  document.getElementById('link-editor').style.display = 'none';
+}
+
+function onLinkUrlKeydown(e) {
+  if (e.key === 'Enter') { e.preventDefault(); confirmInsertLink(); }
+  if (e.key === 'Escape') { e.preventDefault(); cancelInsertLink(); }
+}
+
+function confirmInsertLink() {
+  const url = document.getElementById('link-url').value.trim();
+  if (!/^https?:\/\//i.test(url)) { showError('Link URL must start with http:// or https://'); return; }
+
+  const { start, end, text } = pendingLinkSelection;
+  cancelInsertLink();
+
+  const textarea = document.getElementById('f-review-text');
+  const value = textarea.value;
+  const insertText = `[url=${url}]${text}[/url]`;
+  textarea.value = value.slice(0, start) + insertText + value.slice(end);
+  textarea.focus();
+  const selectFrom = start + `[url=${url}]`.length;
+  textarea.setSelectionRange(selectFrom, selectFrom + text.length);
+  onReviewTextInput();
+}
+
 // ── Custom format blocks (reusable saved snippets, stored in data/custom-blocks.json) ──
 async function loadCustomBlocksList() {
   try {
@@ -995,14 +1083,27 @@ async function loadCustomBlocksList() {
 
 function renderCustomBlocks() {
   const el = document.getElementById('blocks-dropdown');
-  el.innerHTML = customBlocks.length
-    ? customBlocks.map(b => `
-        <div class="blocks-dropdown-item" onclick="insertCustomBlock('${b.id}')">
-          <span>${escHtml(b.name)}</span>
-          <button type="button" class="blocks-dropdown-remove" onclick="deleteCustomBlock(event, '${b.id}')" title="Delete this block">&times;</button>
+  if (!customBlocks.length) { el.innerHTML = '<div class="dropdown-empty">No saved blocks yet.</div>'; return; }
+
+  el.innerHTML = customBlocks.map(b => {
+    if (confirmingBlockDeleteId === b.id) {
+      return `
+        <div class="dropdown-item dropdown-item-confirm">
+          <span>Delete "${escHtml(b.name)}"?</span>
+          <span>
+            <button type="button" class="dropdown-remove" onclick="event.stopPropagation(); confirmDeleteCustomBlock('${b.id}')" title="Confirm delete">&check;</button>
+            <button type="button" class="dropdown-remove" onclick="event.stopPropagation(); cancelDeleteCustomBlock()" title="Cancel">&times;</button>
+          </span>
         </div>
-      `).join('')
-    : '<div class="blocks-dropdown-empty">No saved blocks yet.</div>';
+      `;
+    }
+    return `
+      <div class="dropdown-item" onclick="insertCustomBlock('${b.id}')">
+        <span>${escHtml(b.name)}</span>
+        <button type="button" class="dropdown-remove" onclick="startDeleteCustomBlock(event, '${b.id}')" title="Delete this block">&times;</button>
+      </div>
+    `;
+  }).join('');
 }
 
 function toggleBlocksDropdown(e) {
@@ -1012,6 +1113,7 @@ function toggleBlocksDropdown(e) {
 
 function closeBlocksDropdown() {
   document.getElementById('blocks-dropdown').classList.remove('open');
+  confirmingBlockDeleteId = null;
 }
 
 function startSaveCustomBlock() {
@@ -1078,11 +1180,21 @@ function insertCustomBlock(id) {
   closeBlocksDropdown();
 }
 
-async function deleteCustomBlock(e, id) {
+function startDeleteCustomBlock(e, id) {
   e.stopPropagation();
+  confirmingBlockDeleteId = id;
+  renderCustomBlocks();
+}
+
+function cancelDeleteCustomBlock() {
+  confirmingBlockDeleteId = null;
+  renderCustomBlocks();
+}
+
+async function confirmDeleteCustomBlock(id) {
   const block = customBlocks.find(b => b.id === id);
+  confirmingBlockDeleteId = null;
   if (!block) return;
-  if (!confirm(`Delete "${block.name}"? This cannot be undone.`)) return;
 
   setSt('blocks-status', 'Deleting...', false);
   try {
@@ -1116,14 +1228,21 @@ function switchReviewTab(id) {
   renderReviewTabs();
 }
 
-function addReviewTab() {
+function addReviewTab(name, content = '') {
   syncActiveTabContent();
   const id = `tab-${Date.now()}`;
-  extraTabs.push({ id, name: `Tab ${extraTabs.length + 2}`, content: '' });
+  extraTabs.push({ id, name: name || `Tab ${extraTabs.length + 2}`, content });
   activeReviewTab = id;
-  set('f-review-text', '');
+  set('f-review-text', content);
   renderReviewTabs();
   updatePreview();
+  closeTabAddDropdown();
+}
+
+function addReviewTabFromTemplate(templateId) {
+  const template = customTabs.find(t => t.id === templateId);
+  if (!template) return;
+  addReviewTab(template.name, template.content);
 }
 
 function deleteReviewTab(e, id) {
@@ -1194,7 +1313,10 @@ function renderReviewTabs() {
   el.innerHTML = `
     <button type="button" class="form-tab ${activeReviewTab === 'steam' ? 'active' : ''}" data-tab-id="steam">Steam Review</button>
     ${extraHtml}
-    <button type="button" class="form-tab form-tab-add" onclick="addReviewTab()">+</button>
+    <div class="dropdown-wrap tab-add-wrap">
+      <button type="button" class="form-tab form-tab-add" onclick="toggleTabAddDropdown(event)" title="Add a tab">+</button>
+      <div id="tab-add-dropdown" class="dropdown-menu"></div>
+    </div>
   `;
 
   el.querySelectorAll('.form-tab[data-tab-id]').forEach(btn => {
@@ -1243,6 +1365,138 @@ function reorderReviewTabs(draggedId, targetId) {
   extraTabs.splice(toIdx, 0, moved);
   renderReviewTabs();
   updatePreview();
+}
+
+// ── Custom saved tabs (reusable tab templates, stored in data/custom-tabs.json) ──
+async function loadCustomTabsList() {
+  try {
+    const { tabs, sha } = await fetchTabsFile();
+    customTabs = tabs;
+    tabsSha = sha;
+    renderTabAddDropdown();
+  } catch (e) {
+    setSt('tabs-status', e.message, true);
+  }
+}
+
+function renderTabAddDropdown() {
+  const el = document.getElementById('tab-add-dropdown');
+  if (!el) return;
+  const savedHtml = customTabs.map(t => {
+    if (confirmingTabDeleteId === t.id) {
+      return `
+        <div class="dropdown-item dropdown-item-confirm">
+          <span>Delete "${escHtml(t.name)}"?</span>
+          <span>
+            <button type="button" class="dropdown-remove" onclick="event.stopPropagation(); confirmDeleteCustomTab('${t.id}')" title="Confirm delete">&check;</button>
+            <button type="button" class="dropdown-remove" onclick="event.stopPropagation(); cancelDeleteCustomTab()" title="Cancel">&times;</button>
+          </span>
+        </div>
+      `;
+    }
+    return `
+      <div class="dropdown-item" onclick="addReviewTabFromTemplate('${t.id}')">
+        <span>${escHtml(t.name)}</span>
+        <button type="button" class="dropdown-remove" onclick="startDeleteCustomTab(event, '${t.id}')" title="Delete this saved tab">&times;</button>
+      </div>
+    `;
+  }).join('');
+  el.innerHTML = `
+    <div class="dropdown-item" onclick="addReviewTab()">
+      <span>Blank tab</span>
+    </div>
+    ${savedHtml}
+  `;
+}
+
+function toggleTabAddDropdown(e) {
+  e.stopPropagation();
+  renderTabAddDropdown();
+  document.getElementById('tab-add-dropdown').classList.toggle('open');
+}
+
+function closeTabAddDropdown() {
+  const el = document.getElementById('tab-add-dropdown');
+  if (el) el.classList.remove('open');
+  confirmingTabDeleteId = null;
+}
+
+function startSaveCustomTab() {
+  syncActiveTabContent();
+  const current = activeReviewTab === 'steam'
+    ? { name: 'Steam Review', content: steamBody }
+    : extraTabs.find(t => t.id === activeReviewTab);
+  if (!current || !current.content.trim()) { setSt('tabs-status', 'The active tab has no content to save.', true); return; }
+
+  pendingTabContent = current.content;
+  document.getElementById('save-tab-btn').style.display = 'none';
+  document.getElementById('save-tab-editor').style.display = '';
+  const input = document.getElementById('save-tab-name');
+  input.value = current.name;
+  input.focus();
+  input.select();
+}
+
+function cancelSaveCustomTab() {
+  pendingTabContent = null;
+  document.getElementById('save-tab-btn').style.display = '';
+  document.getElementById('save-tab-editor').style.display = 'none';
+}
+
+function onSaveTabNameKeydown(e) {
+  if (e.key === 'Enter') { e.preventDefault(); confirmSaveCustomTab(); }
+  if (e.key === 'Escape') { e.preventDefault(); cancelSaveCustomTab(); }
+}
+
+async function confirmSaveCustomTab() {
+  const name = document.getElementById('save-tab-name').value.trim();
+  if (!name) return;
+  const content = pendingTabContent;
+  cancelSaveCustomTab();
+
+  const { owner, repo, token } = getCfg();
+  if (!owner || !repo || !token) { setSt('tabs-status', 'Configure GitHub settings first.', true); return; }
+
+  setSt('tabs-status', 'Saving...', false);
+  try {
+    const { tabs: latest, sha } = await fetchTabsFile();
+    tabsSha = sha;
+    latest.push({ id: `saved-tab-${Date.now()}`, name, content });
+    await pushTabsFile(latest, `Add saved tab: ${name}`);
+    customTabs = latest;
+    setSt('tabs-status', 'Saved!', false);
+  } catch (e) {
+    setSt('tabs-status', e.message, true);
+  }
+}
+
+function startDeleteCustomTab(e, id) {
+  e.stopPropagation();
+  confirmingTabDeleteId = id;
+  renderTabAddDropdown();
+}
+
+function cancelDeleteCustomTab() {
+  confirmingTabDeleteId = null;
+  renderTabAddDropdown();
+}
+
+async function confirmDeleteCustomTab(id) {
+  const tab = customTabs.find(t => t.id === id);
+  confirmingTabDeleteId = null;
+  if (!tab) return;
+
+  setSt('tabs-status', 'Deleting...', false);
+  try {
+    const { tabs: latest, sha } = await fetchTabsFile();
+    tabsSha = sha;
+    await pushTabsFile(latest.filter(t => t.id !== id), `Delete saved tab: ${tab.name}`);
+    customTabs = latest.filter(t => t.id !== id);
+    renderTabAddDropdown();
+    setSt('tabs-status', 'Deleted.', false);
+  } catch (e) {
+    setSt('tabs-status', e.message, true);
+  }
 }
 
 // ── Tags ──────────────────────────────────────────────────────────────────────
@@ -1600,6 +1854,9 @@ function b64decode(b64) {
     }
     if (!e.target.closest('.blocks-dropdown-wrap')) {
       closeBlocksDropdown();
+    }
+    if (!e.target.closest('.tab-add-wrap')) {
+      closeTabAddDropdown();
     }
   });
 })();

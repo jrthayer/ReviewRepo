@@ -23,6 +23,15 @@ Two front ends share one data model:
 - **`admin.html`** — a single file with all its CSS and JS inline (no separate admin.js). Used to author/edit/delete reviews and push them to GitHub, plus preview exactly how a review will look both as a site card and as a Steam review.
 - **`shared.js`** — constants and helpers used identically by both of the above (`escHtml`, `formatDate`, `steamAppId`, `splitSubTabs`, `renderBBCode`, `renderCard`, `STEAM_ICON`, `SITE_LINK_TEXT`). **Anything both files need must live here, not be duplicated in each** — this file used to not exist and the same logic/text drifted out of sync between the two UIs. `admin.html` loads it via a normal blocking `<script src="shared.js">` in `<head>`; `index.html` loads it dynamically alongside `app.js` (see below) with `.async = false` on both loader tags, in that order, so `shared.js` is guaranteed to finish before `app.js` runs even though both are non-parser-inserted (and thus otherwise unordered) script tags.
 
+### No native browser dialogs in the admin UI
+
+`admin.html` uses no `prompt()`/`alert()`/`confirm()` anywhere — build inline UI instead:
+- **Text input** (naming/entering something): swap the trigger button for an `<input>` with its own confirm/cancel controls, focused (and often pre-filled). See the tab-rename flow (`startRenameTab`), the "+ Save Block"/"+ Save Tab" naming flows (`startSaveCustomBlock`/`startSaveCustomTab`), and the toolbar's Link URL entry (`startInsertLink`/`confirmInsertLink`/`cancelInsertLink`, no longer `applyFormat('url')`).
+- **Destructive confirmation**: replace the row/button with an inline "Delete X? ✓ ✕" state instead of `confirm()`. Dropdown rows: saved-block and saved-tab delete (`startDeleteCustomBlock`/`startDeleteCustomTab` and their `confirm*`/`cancel*` counterparts). Standalone button: the review Delete button (`startDeleteReview`/`confirmDeleteReview`/`cancelDeleteReview`) swaps for a `#delete-confirm` row in `#save-row`.
+- **Errors**: go through `#error-banner` (`showError`/`setSt(id, msg, true)`), never `alert()`.
+
+Keep new interactive admin features on this pattern — a `start*`/`confirm*`/`cancel*` trio swapping visibility between a trigger and an inline editor/confirm row is the established shape here.
+
 ### Data model & persistence
 
 A review is a plain object: `{ id, title, recommended, summary, coverImage, hoursPlayed, datePosted, body, tabs: [{ id, name, content }], tags: [] }`. `body` (and each tab's `content`) is BBCode-ish markup (see below), not HTML.
@@ -51,9 +60,14 @@ Two distinct, similarly-named tab systems:
 
 `?review=<id>` on `index.html` auto-expands and scrolls to that card on load (see `init()` in `app.js`). `admin.html`'s `siteReviewUrl(id)` builds that URL, and it's appended (using the shared `SITE_LINK_TEXT` copy) both to the site card itself (`.card-permalink`) and to the Steam-review text/preview — so a posted Steam review links back to the fuller write-up on the site, and the site card links to itself for sharing.
 
-### Custom format blocks
+### Custom format blocks & saved tabs
 
-Admin's editor toolbar has a "Blocks ▾" dropdown (`renderCustomBlocks`) of reusable saved text snippets, independent of any single review — e.g. a fully-written `[tab=Name]...[/tab]` section you want to reuse across reviews. "+ Save Block" saves the current textarea selection under a name; clicking a saved block in the dropdown inserts it at the cursor (`insertCustomBlock`), same idea as the built-in toolbar buttons but with user-authored content instead of a fixed template. Blocks are stored the same way reviews are — `data/custom-blocks.json` in the configured GitHub repo, loaded alongside the review list on connect (`loadCustomBlocksList`, called from `loadReviewList`) — not `localStorage`, so they persist across machines/sessions rather than being tied to one browser. Saving/deleting a block requires GitHub to be configured, same restriction as saving/deleting a review.
+Two parallel "save this for reuse" features in the admin editor, both following the same shape: `{ id, name, content }`, stored as their own JSON array in the configured GitHub repo (like `reviews.json`), and both use the shared `.dropdown-wrap`/`.dropdown-menu`/`.dropdown-item`/`.dropdown-remove`/`.dropdown-empty` CSS for their popup UI (each wrapper also carries its own extra class — `.blocks-dropdown-wrap`, `.tab-add-wrap` — purely so the outside-click-to-close handler in `init()` can target each independently).
+
+- **Custom format blocks** — a "Blocks ▾" dropdown (`renderCustomBlocks`) of reusable saved *text snippets*, independent of any single review — e.g. a fully-written `[tab=Name]...[/tab]` section you want to reuse across reviews. "+ Save Block" saves the current textarea selection under a name (typed into an inline input, not `prompt()`); clicking a saved block inserts it at the cursor (`insertCustomBlock`). Stored at `data/custom-blocks.json`.
+- **Saved tabs** — the review editor's "+" tab button (next to the built-in Steam Review tab and any tabs already on the review) is a dropdown, not an immediate action: its first entry is always "Blank tab" (the old default behavior, `addReviewTab()` with no args), followed by any saved tab templates (`renderTabAddDropdown`); picking one creates a new review tab pre-populated with that template's name/content (`addReviewTabFromTemplate`). "+ Save Tab" saves the *currently active tab* (name + content, via `syncActiveTabContent()` first) as a new template. Stored at `data/custom-tabs.json`.
+
+Both features share the `fetchFile`/`pushFile`-style pattern: `fetchBlocksFile`/`pushBlocksFile` and `fetchTabsFile`/`pushTabsFile` are thin wrappers around `ghGetJson`/`ghPutJson` (see above). Both load alongside the review list on connect (`loadCustomBlocksList`/`loadCustomTabsList`, called from `loadReviewList`) — not `localStorage` — so they persist across machines/sessions. Saving/deleting either requires GitHub to be configured, same restriction as saving/deleting a review.
 
 ### Steam library import
 
