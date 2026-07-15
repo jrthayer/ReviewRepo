@@ -194,6 +194,21 @@
     .form-tab-close:hover { color: var(--text); }
     .form-tab-add { padding: 0.35rem 0.65rem; font-weight: 700; }
 
+    .sub-tab-bar { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; padding: 0.5rem 0 0.4rem; }
+    .form-subtab {
+      display: flex; align-items: center; gap: 0.3rem;
+      background: var(--input-bg); color: var(--muted); border: 1px solid var(--border);
+      border-radius: 4px; padding: 0.25rem 0.6rem;
+      font-size: 0.75rem; font-weight: 600; cursor: pointer;
+    }
+    .form-subtab:hover:not(.active) { color: var(--text); }
+    .form-subtab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .form-subtab.active .form-tab-close { color: rgba(255,255,255,0.85); }
+    .form-subtab[draggable="true"] { cursor: grab; }
+    .form-subtab.dragging { opacity: 0.4; }
+    .form-subtab.drag-over { border-color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); }
+    .form-subtab-add { font-weight: 700; }
+
     #save-tab-editor { display: inline-flex; gap: 0.3rem; align-items: center; }
     #save-tab-editor button { padding: 0.25rem 0.5rem !important; min-width: auto !important; }
 
@@ -605,8 +620,6 @@
             <button type="button" onclick="applyFormat('hr')" title="Horizontal rule">&mdash;</button>
             <button type="button" onclick="applyFormat('noparse')" title="Raw text (ignore formatting)">Raw</button>
             <span class="format-toolbar-sep"></span>
-            <button type="button" onclick="applyFormat('tab')" title="Nested tab section">Tab</button>
-            <span class="format-toolbar-sep"></span>
             <div class="dropdown-wrap blocks-dropdown-wrap">
               <button type="button" onclick="toggleBlocksDropdown(event)" title="Insert a saved block">Blocks &#9662;</button>
               <div id="blocks-dropdown" class="dropdown-menu"></div>
@@ -629,6 +642,7 @@
             </span>
             <span id="tabs-status" class="status"></span>
           </div>
+          <div class="sub-tab-bar" id="sub-tab-bar"></div>
           <textarea id="f-review-text" rows="5" placeholder="Main review text..." spellcheck="true" oninput="onReviewTextInput()"></textarea>
           <div id="bbcode-warnings"></div>
         </div>
@@ -679,6 +693,9 @@ let steamBody        = '';
 let extraTabs        = []; // [{ id, name, content }]
 let activeReviewTab  = 'steam';
 let draggedTabId     = null;
+let activeSubTabs    = []; // [{ id, name, content }] — parsed from the active review tab's [tab=Name] blocks; empty means plain (unsplit) content
+let activeSubTabId   = null; // id of the sub-tab currently shown in the editor, or null when activeSubTabs is empty
+let draggedSubTabId  = null;
 let sitePreviewExpanded = true;
 let sitePreviewBodyTab  = 'steam';
 let sitePreviewSubTab   = 0;
@@ -960,8 +977,11 @@ function setForm(r) {
   currentTags = [...(r.tags || [])];
   renderTags();
   activeReviewTab = 'steam';
-  set('f-review-text', steamBody);
+  activeSubTabs = parseSubTabsForEditing(steamBody);
+  activeSubTabId = activeSubTabs[0]?.id || null;
+  set('f-review-text', activeSubTabId ? activeSubTabs[0].content : steamBody);
   renderReviewTabs();
+  renderSubTabBar();
 }
 
 function clearForm() {
@@ -974,8 +994,11 @@ function clearForm() {
   currentTags = [];
   renderTags();
   activeReviewTab = 'steam';
+  activeSubTabs = [];
+  activeSubTabId = null;
   set('f-review-text', '');
   renderReviewTabs();
+  renderSubTabBar();
 }
 
 // ── Review tabs ───────────────────────────────────────────────────────────────
@@ -1011,12 +1034,6 @@ function applyFormat(type) {
     insertText = `[noparse]${inner}[/noparse]`;
     selectFrom = start + '[noparse]'.length;
     selectTo = selectFrom + inner.length;
-  } else if (type === 'tab') {
-    const name = 'Tab';
-    const inner = selected || 'text';
-    insertText = `[tab=${name}]${inner}[/tab]`;
-    selectFrom = start + '[tab='.length;
-    selectTo = selectFrom + name.length;
   } else {
     const [open, close] = FORMAT_TAGS[type];
     const inner = selected || 'text';
@@ -1214,7 +1231,12 @@ async function confirmDeleteCustomBlock(id) {
 }
 
 function syncActiveTabContent() {
-  const val = document.getElementById('f-review-text').value;
+  let val = document.getElementById('f-review-text').value;
+  if (activeSubTabs.length) {
+    const sub = activeSubTabs.find(t => t.id === activeSubTabId);
+    if (sub) sub.content = val;
+    val = serializeSubTabs(activeSubTabs);
+  }
   if (activeReviewTab === 'steam') {
     steamBody = val;
   } else {
@@ -1224,15 +1246,21 @@ function syncActiveTabContent() {
   return { steamBody };
 }
 
+function getActiveTabRawContent() {
+  return activeReviewTab === 'steam' ? steamBody : (extraTabs.find(t => t.id === activeReviewTab)?.content || '');
+}
+
 function switchReviewTab(id) {
   syncActiveTabContent();
   activeReviewTab = id;
-  const tab = extraTabs.find(t => t.id === id);
-  set('f-review-text', id === 'steam' ? steamBody : (tab?.content || ''));
+  const content = getActiveTabRawContent();
+  activeSubTabs = parseSubTabsForEditing(content);
+  activeSubTabId = activeSubTabs[0]?.id || null;
+  set('f-review-text', activeSubTabId ? activeSubTabs[0].content : content);
   renderReviewTabs();
-  sitePreviewExpanded = true;
+  renderSubTabBar();
   sitePreviewBodyTab = id;
-  sitePreviewSubTab = 0;
+  syncSitePreviewToActiveSubTab();
   updatePreview();
 }
 
@@ -1241,8 +1269,13 @@ function addReviewTab(name, content = '') {
   const id = `tab-${Date.now()}`;
   extraTabs.push({ id, name: name || `Tab ${extraTabs.length + 2}`, content });
   activeReviewTab = id;
-  set('f-review-text', content);
+  activeSubTabs = parseSubTabsForEditing(content);
+  activeSubTabId = activeSubTabs[0]?.id || null;
+  set('f-review-text', activeSubTabId ? activeSubTabs[0].content : content);
   renderReviewTabs();
+  renderSubTabBar();
+  sitePreviewBodyTab = id;
+  syncSitePreviewToActiveSubTab();
   updatePreview();
   closeTabAddDropdown();
 }
@@ -1260,10 +1293,184 @@ function deleteReviewTab(e, id) {
   extraTabs.splice(idx, 1);
   if (activeReviewTab === id) {
     activeReviewTab = 'steam';
-    set('f-review-text', steamBody);
+    activeSubTabs = parseSubTabsForEditing(steamBody);
+    activeSubTabId = activeSubTabs[0]?.id || null;
+    set('f-review-text', activeSubTabId ? activeSubTabs[0].content : steamBody);
+    renderSubTabBar();
+    sitePreviewBodyTab = 'steam';
+    syncSitePreviewToActiveSubTab();
   }
   renderReviewTabs();
   updatePreview();
+}
+
+// ── Sub-tabs (the [tab=Name] blocks inside a single review tab's content) ─────
+function parseSubTabsForEditing(content) {
+  const parsed = splitSubTabs(content);
+  return parsed ? parsed.map((t, i) => ({ id: `sub-${Date.now()}-${i}`, name: t.name, content: t.content })) : [];
+}
+
+function serializeSubTabs(subtabs) {
+  return subtabs.map(t => `[tab=${t.name}]\n${t.content}\n[/tab]`).join('\n\n');
+}
+
+// Keeps the Site Card Preview's expanded sub-tab pointed at whatever sub-tab is
+// active in the editor — the preview's subTabs are parsed (via splitSubTabs) from
+// the same serialized content in the same order, so index lookup by id lines up.
+function syncSitePreviewToActiveSubTab() {
+  sitePreviewExpanded = true;
+  sitePreviewSubTab = Math.max(0, activeSubTabs.findIndex(t => t.id === activeSubTabId));
+}
+
+function switchSubTab(id) {
+  if (id === activeSubTabId) return;
+  syncActiveTabContent();
+  activeSubTabId = id;
+  const tab = activeSubTabs.find(t => t.id === id);
+  set('f-review-text', tab?.content || '');
+  renderSubTabBar();
+  syncSitePreviewToActiveSubTab();
+  updatePreview();
+}
+
+function addSubTab() {
+  syncActiveTabContent();
+  if (!activeSubTabs.length) {
+    const existing = getActiveTabRawContent();
+    if (existing.trim()) activeSubTabs = [{ id: `sub-${Date.now()}`, name: 'Tab 1', content: existing }];
+  }
+  const id = `sub-${Date.now()}-${activeSubTabs.length}`;
+  activeSubTabs.push({ id, name: `Tab ${activeSubTabs.length + 1}`, content: '' });
+  activeSubTabId = id;
+  set('f-review-text', '');
+  renderSubTabBar();
+  syncActiveTabContent();
+  syncSitePreviewToActiveSubTab();
+  updatePreview();
+}
+
+function deleteSubTab(e, id) {
+  e.stopPropagation();
+  const idx = activeSubTabs.findIndex(t => t.id === id);
+  if (idx === -1) return;
+  activeSubTabs.splice(idx, 1);
+  if (activeSubTabId === id) {
+    activeSubTabId = activeSubTabs[0]?.id || null;
+    set('f-review-text', activeSubTabs[0]?.content || '');
+  }
+  renderSubTabBar();
+  syncActiveTabContent();
+  syncSitePreviewToActiveSubTab();
+  updatePreview();
+}
+
+function reorderSubTabs(draggedId, targetId) {
+  const fromIdx = activeSubTabs.findIndex(t => t.id === draggedId);
+  const toIdx = activeSubTabs.findIndex(t => t.id === targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const [moved] = activeSubTabs.splice(fromIdx, 1);
+  activeSubTabs.splice(toIdx, 0, moved);
+  renderSubTabBar();
+  syncActiveTabContent();
+  syncSitePreviewToActiveSubTab();
+  updatePreview();
+}
+
+function startRenameSubTab(e, id) {
+  e.stopPropagation();
+  const tab = activeSubTabs.find(t => t.id === id);
+  if (!tab) return;
+  const oldBtn = e.target.closest('.form-subtab');
+  if (!oldBtn) return;
+
+  const wrapper = document.createElement('span');
+  wrapper.className = 'form-subtab active';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = tab.name;
+  input.className = 'form-tab-rename-input';
+  input.onclick = ev => ev.stopPropagation();
+  input.ondblclick = ev => ev.stopPropagation();
+  input.onkeydown = ev => {
+    ev.stopPropagation();
+    if (ev.key === 'Enter') input.blur();
+    if (ev.key === 'Escape') { input.value = tab.name; input.blur(); }
+  };
+  input.onblur = () => {
+    tab.name = input.value.trim() || tab.name;
+    renderSubTabBar();
+    syncActiveTabContent();
+    updatePreview();
+  };
+
+  const closeBtn = document.createElement('span');
+  closeBtn.className = 'form-tab-close';
+  closeBtn.textContent = '×';
+  closeBtn.onclick = ev => deleteSubTab(ev, id);
+
+  wrapper.appendChild(input);
+  wrapper.appendChild(closeBtn);
+  oldBtn.replaceWith(wrapper);
+  input.focus();
+  input.select();
+}
+
+function renderSubTabBar() {
+  const el = document.getElementById('sub-tab-bar');
+  if (!el) return;
+
+  if (!activeSubTabs.length) {
+    el.innerHTML = `<button type="button" class="form-subtab form-subtab-add" onclick="addSubTab()" title="Split this tab's body into sub-tabs">+ Sub-tab</button>`;
+    return;
+  }
+
+  const tabsHtml = activeSubTabs.map(t => `
+    <button type="button" class="form-subtab ${activeSubTabId === t.id ? 'active' : ''}" data-subtab-id="${escHtml(t.id)}" draggable="true">
+      <span class="form-tab-label">${escHtml(t.name)}</span>
+      <span class="form-tab-close" onclick="deleteSubTab(event, '${t.id}')">&times;</span>
+    </button>
+  `).join('');
+
+  el.innerHTML = `
+    ${tabsHtml}
+    <button type="button" class="form-subtab form-subtab-add" onclick="addSubTab()" title="Add a sub-tab">+</button>
+  `;
+
+  el.querySelectorAll('.form-subtab[data-subtab-id]').forEach(btn => {
+    const id = btn.dataset.subtabId;
+
+    btn.addEventListener('click', e => {
+      if (e.target.closest('.form-tab-close') || e.target.closest('.form-tab-rename-input')) return;
+      switchSubTab(id);
+    });
+    btn.addEventListener('dblclick', e => {
+      if (e.target.closest('.form-tab-close') || e.target.closest('.form-tab-rename-input')) return;
+      startRenameSubTab(e, id);
+    });
+
+    btn.addEventListener('dragstart', e => {
+      draggedSubTabId = id;
+      e.dataTransfer.effectAllowed = 'move';
+      requestAnimationFrame(() => btn.classList.add('dragging'));
+    });
+    btn.addEventListener('dragend', () => {
+      draggedSubTabId = null;
+      el.querySelectorAll('.form-subtab').forEach(b => b.classList.remove('dragging', 'drag-over'));
+    });
+    btn.addEventListener('dragover', e => {
+      if (!draggedSubTabId || draggedSubTabId === id) return;
+      e.preventDefault();
+      btn.classList.add('drag-over');
+    });
+    btn.addEventListener('dragleave', () => btn.classList.remove('drag-over'));
+    btn.addEventListener('drop', e => {
+      e.preventDefault();
+      btn.classList.remove('drag-over');
+      if (!draggedSubTabId || draggedSubTabId === id) return;
+      reorderSubTabs(draggedSubTabId, id);
+    });
+  });
 }
 
 function startRenameTab(e, id) {
@@ -1650,26 +1857,22 @@ function renderSitePreview(r) {
   });
   document.querySelector('#site-preview .card-main').onclick = () => {
     sitePreviewExpanded = !sitePreviewExpanded;
-    sitePreviewBodyTab = 'steam';
-    sitePreviewSubTab = 0;
     renderSitePreview(getForm());
   };
+  // Clicking a tab/sub-tab pill in the preview drives the same editor functions the
+  // editor's own tab bars use, so the two stay in sync in both directions.
   document.querySelectorAll('#site-preview .review-tab').forEach(btn => {
     btn.onclick = e => {
       e.stopPropagation();
-      if (btn.dataset.reviewTab === sitePreviewBodyTab) return;
-      sitePreviewBodyTab = btn.dataset.reviewTab;
-      sitePreviewSubTab = 0;
-      renderSitePreview(getForm());
+      if (btn.dataset.reviewTab === activeReviewTab) return;
+      switchReviewTab(btn.dataset.reviewTab);
     };
   });
   document.querySelectorAll('#site-preview .sub-tab').forEach(btn => {
     btn.onclick = e => {
       e.stopPropagation();
-      const idx = Number(btn.dataset.subTab);
-      if (idx === sitePreviewSubTab) return;
-      sitePreviewSubTab = idx;
-      renderSitePreview(getForm());
+      const sub = activeSubTabs[Number(btn.dataset.subTab)];
+      if (sub) switchSubTab(sub.id);
     };
   });
 }
