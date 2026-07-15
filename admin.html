@@ -19,6 +19,7 @@
       --muted: #8a8a9a;
       --green: #57cc99;
       --red: #e63946;
+      --amber: #e9c46a;
       --input-bg: #0d1526;
     }
 
@@ -269,6 +270,8 @@
     #save-row { display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap; padding-top: 0.25rem; }
     .status { font-size: 0.78rem; }
     .status.ok { color: var(--green); }
+
+    #bbcode-warnings { font-size: 0.78rem; color: var(--amber); min-height: 1.1em; margin-top: 0.3rem; }
 
     /* ── Tag input ── */
     #tag-input-wrap { position: relative; }
@@ -531,7 +534,7 @@
     <form id="review-form" onsubmit="return false">
 
       <label>Game Title
-        <input id="f-title" type="text" placeholder="e.g. Elden Ring" oninput="syncId(); updatePreview()">
+        <input id="f-title" type="text" placeholder="e.g. Elden Ring" spellcheck="true" oninput="syncId(); updatePreview()">
       </label>
 
       <label>ID (URL slug — auto-filled)
@@ -546,7 +549,7 @@
       </label>
 
       <label>Summary (short tagline)
-        <input id="f-summary" type="text" placeholder="One sentence hook" oninput="updatePreview()">
+        <input id="f-summary" type="text" placeholder="One sentence hook" spellcheck="true" oninput="updatePreview()">
       </label>
 
       <label>Cover Image URL (optional)
@@ -626,7 +629,8 @@
             </span>
             <span id="tabs-status" class="status"></span>
           </div>
-          <textarea id="f-review-text" rows="5" placeholder="Main review text..." oninput="onReviewTextInput()"></textarea>
+          <textarea id="f-review-text" rows="5" placeholder="Main review text..." spellcheck="true" oninput="onReviewTextInput()"></textarea>
+          <div id="bbcode-warnings"></div>
         </div>
       </div>
 
@@ -1226,6 +1230,10 @@ function switchReviewTab(id) {
   const tab = extraTabs.find(t => t.id === id);
   set('f-review-text', id === 'steam' ? steamBody : (tab?.content || ''));
   renderReviewTabs();
+  sitePreviewExpanded = true;
+  sitePreviewBodyTab = id;
+  sitePreviewSubTab = 0;
+  updatePreview();
 }
 
 function addReviewTab(name, content = '') {
@@ -1593,6 +1601,41 @@ function updatePreview() {
   const r = getForm();
   renderSitePreview(r);
   renderSteamPreview(r);
+  renderBBCodeWarnings();
+}
+
+// ── BBCode tag validation ─────────────────────────────────────────────────────
+// Container tags that must appear in [tag]...[/tag] pairs for renderBBCode (shared.js)
+// to actually transform them; anything unbalanced silently falls through as literal text.
+const BBCODE_PAIR_TAGS = ['b','i','u','strike','h1','h2','h3','quote','code','spoiler','list','olist','table','tr','th','td','url','hr','tab'];
+
+function validateBBCode(text) {
+  if (!text) return [];
+  const stripped = text.replace(/\[noparse\]([\s\S]*?)\[\/noparse\]/gi, '');
+  const issues = [];
+
+  for (const name of BBCODE_PAIR_TAGS) {
+    const opens  = (stripped.match(new RegExp(`\\[${name}(=[^\\]]*)?\\]`, 'gi')) || []).length;
+    const closes = (stripped.match(new RegExp(`\\[/${name}\\]`, 'gi')) || []).length;
+    if (opens > closes) issues.push(`${opens - closes} unclosed [${name}] tag${opens - closes > 1 ? 's' : ''}`);
+    else if (closes > opens) issues.push(`${closes - opens} stray [/${name}] tag${closes - opens > 1 ? 's' : ''} (no matching [${name}])`);
+  }
+
+  const npOpen  = (text.match(/\[noparse\]/gi) || []).length;
+  const npClose = (text.match(/\[\/noparse\]/gi) || []).length;
+  if (npOpen > npClose) issues.push(`${npOpen - npClose} unclosed [noparse] tag${npOpen - npClose > 1 ? 's' : ''}`);
+  else if (npClose > npOpen) issues.push(`${npClose - npOpen} stray [/noparse] tag${npClose - npOpen > 1 ? 's' : ''}`);
+
+  if (/\[url\]/i.test(stripped)) issues.push('[url] is missing its address — use [url=https://...]');
+  if (/\[tab\]/i.test(stripped)) issues.push('[tab] is missing a name — use [tab=Name]');
+
+  return issues;
+}
+
+function renderBBCodeWarnings() {
+  const el = document.getElementById('bbcode-warnings');
+  const issues = validateBBCode(document.getElementById('f-review-text').value);
+  el.textContent = issues.length ? '⚠ ' + issues.join(' · ') : '';
 }
 
 function renderSitePreview(r) {
