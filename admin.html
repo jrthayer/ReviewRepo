@@ -533,6 +533,22 @@
     }
     #error-banner-close:hover { opacity: 1; }
 
+    #readonly-banner {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      background: var(--amber);
+      color: var(--bg);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      z-index: 99;
+    }
+    #readonly-banner.visible { display: flex; }
+
     @media (max-width: 840px) {
       body { overflow: auto; }
       #workspace { grid-template-columns: 1fr; height: auto; overflow: visible; }
@@ -777,6 +793,10 @@
 <div id="error-banner">
   <span id="error-banner-text"></span>
   <button type="button" id="error-banner-close" onclick="hideError()">&times;</button>
+</div>
+
+<div id="readonly-banner">
+  <span>Read-only: showing default reviews. Configure GitHub above to edit and save your own.</span>
 </div>
 
 <script>
@@ -1118,6 +1138,7 @@ async function loadReviewList() {
     fileSha = sha;
     cacheReviews(reviews);
     renderList();
+    hideReadonlyBanner();
     setSt('settings-status', `Connected — ${reviews.length} review(s).`, false);
     loadCustomBlocksList();
     loadCustomTabsList();
@@ -1126,6 +1147,37 @@ async function loadReviewList() {
   } catch (e) {
     setSt('settings-status', e.message, true);
   }
+}
+
+// Read-only fallback for when Settings isn't configured yet — populates the
+// review list/editor/tag chips from the public DEFAULT_DATA_REPO
+// (shared.js), same data app.js falls back to, so there's something to
+// browse and experiment with in the form immediately rather than a blank
+// editor. Deliberately doesn't touch Settings/getCfg() at all: Save/Delete
+// already refuse to run without a configured owner/repo/token
+// (saveReview/startDeleteReview), and leaving those empty is what keeps
+// that guard firing correctly against this fallback data.
+async function loadDefaultReviewList() {
+  setSt('settings-status', 'Loading default reviews...', false);
+  const [defaultReviews, defaultTagCategories, defaultTags] = await Promise.all([
+    fetchDefaultRepoJson('data/reviews.json'),
+    fetchDefaultRepoJson('data/tag-categories.json'),
+    fetchDefaultRepoJson('data/tags.json'),
+  ]);
+  // If Settings got configured (and loadReviewList() ran) while this fetch
+  // was in flight, don't clobber real data with the read-only fallback.
+  const cfg = getCfg();
+  if (cfg.owner && cfg.repo && cfg.token) return;
+  reviews = defaultReviews || [];
+  tagCategories = defaultTagCategories || [];
+  tagRegistry = defaultTags || [];
+  savedTagCategories = tagCategories.map(c => ({ ...c }));
+  savedTagRegistry = tagRegistry.map(t => ({ ...t }));
+  showReadonlyBanner();
+  renderList();
+  renderTags();
+  renderManageTagsDropdown();
+  updatePreview();
 }
 
 function renderList() {
@@ -1224,6 +1276,13 @@ async function saveReview() {
 
 function startDeleteReview() {
   if (!editingId) return;
+  // Same guard saveReview() uses — without it, a review loaded from the
+  // read-only default-repo fallback (see loadDefaultReviewList) could open
+  // the delete confirmation and then fail with a raw GitHub error instead
+  // of a clear one, since fetchFile()/pushFile() would run against an
+  // unconfigured owner/repo/token.
+  const { owner, repo, token } = getCfg();
+  if (!owner || !repo || !token) { setSt('save-status', 'Configure GitHub settings first.', true); return; }
   startInlineEditor('delete-btn', 'delete-confirm', null);
 }
 
@@ -3237,6 +3296,18 @@ function hideError() {
   document.getElementById('error-banner').classList.remove('visible');
 }
 
+// Persistent (no auto-hide, no dismiss) — unlike showError/hideError, this
+// isn't a transient notice, it stays up for as long as the editor is
+// actually showing DEFAULT_DATA_REPO's read-only fallback data (see
+// loadDefaultReviewList/loadReviewList).
+function showReadonlyBanner() {
+  document.getElementById('readonly-banner').classList.add('visible');
+}
+
+function hideReadonlyBanner() {
+  document.getElementById('readonly-banner').classList.remove('visible');
+}
+
 function b64encode(str) {
   const bytes = new TextEncoder().encode(str);
   let bin = '';
@@ -3272,7 +3343,10 @@ function b64decode(b64) {
   renderList();
 
   if (cfg.owner && cfg.repo && cfg.token) loadReviewList();
-  else document.getElementById('settings').setAttribute('open', '');
+  else {
+    document.getElementById('settings').setAttribute('open', '');
+    loadDefaultReviewList();
+  }
 
   if (steamKey && steamId) loadSteamLibrary();
 

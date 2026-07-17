@@ -3,6 +3,32 @@
 
 const SITE_LINK_TEXT = 'Full breakdown and thoughts on the game can be found here';
 
+// Public, read-only fallback data source — used by the live site (app.js)
+// whenever gh_reviews_cache has never been populated in this browser, and by
+// the admin tool (admin.html) whenever Settings has no owner/repo/token
+// configured yet. Nothing in this app ever writes here automatically; it's
+// only ever written by deliberately configuring admin's Settings with a PAT
+// for this repo. Its only job is to give a fresh visitor/session real data
+// to look at instead of "No reviews yet." / an empty editor.
+const DEFAULT_DATA_REPO = { owner: 'jrthayer', repo: 'ReviewRepo_Data', branch: 'main' };
+
+// Fetches a JSON file from DEFAULT_DATA_REPO via GitHub's raw content CDN —
+// unauthenticated (works for any public repo) and needs no base64 decoding,
+// unlike the authenticated Contents API admin.html uses for its own
+// configured repo (ghGetJson). Resolves to null on any failure (missing
+// file, network error, bad JSON) rather than throwing — every caller treats
+// "nothing there" as a legitimate empty state, not an error to surface.
+async function fetchDefaultRepoJson(path) {
+  const { owner, repo, branch } = DEFAULT_DATA_REPO;
+  try {
+    const res = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 const STEAM_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
   <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.3"/>
   <circle cx="8.7" cy="15.3" r="2.4" fill="currentColor"/>

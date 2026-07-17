@@ -8,9 +8,28 @@ let expandedSubTab = 0;
 let showAllTags = false;
 
 async function init() {
-  reviews = JSON.parse(localStorage.getItem('gh_reviews_cache') || '[]');
-  tagRegistry = JSON.parse(localStorage.getItem('gh_tags_cache') || '[]');
-  tagCategories = JSON.parse(localStorage.getItem('gh_tagcats_cache') || '[]');
+  const cachedReviews = localStorage.getItem('gh_reviews_cache');
+  if (cachedReviews !== null) {
+    reviews = JSON.parse(cachedReviews);
+    tagRegistry = JSON.parse(localStorage.getItem('gh_tags_cache') || '[]');
+    tagCategories = JSON.parse(localStorage.getItem('gh_tagcats_cache') || '[]');
+  } else {
+    // No admin session has ever configured/cached anything in this browser —
+    // fall back to the public default data repo (DEFAULT_DATA_REPO,
+    // shared.js) so a fresh visitor sees real reviews instead of "No
+    // reviews yet." Deliberately kept out of the gh_*_cache keys: those mean
+    // "what admin last loaded/saved from its configured repo," and this
+    // isn't that — configuring a real repo later should behave exactly as
+    // if this fallback never happened.
+    const [defaultReviews, defaultTagCategories, defaultTags] = await Promise.all([
+      fetchDefaultRepoJson('data/reviews.json'),
+      fetchDefaultRepoJson('data/tag-categories.json'),
+      fetchDefaultRepoJson('data/tags.json'),
+    ]);
+    reviews = defaultReviews || [];
+    tagCategories = defaultTagCategories || [];
+    tagRegistry = defaultTags || [];
+  }
 
   const requestedId = new URLSearchParams(location.search).get('review');
   if (requestedId && reviews.some(r => r.id === requestedId)) {
