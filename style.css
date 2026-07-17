@@ -15,6 +15,27 @@
   padding: 0;
 }
 
+/* Scrollbar theming — html (not just body) so it covers the page scrollbar
+   and, since scrollbar-color/-width inherit, every scrollable element inside
+   it too (dropdowns, textareas, code blocks) without repeating this per
+   element. admin.html links this file but redefines these same custom
+   property names with its own darker values in its own later <style> block,
+   so these rules pick up admin's colors there automatically — no duplicate
+   scrollbar CSS needed in admin.html itself. */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) var(--surface);
+}
+
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+  border: 3px solid var(--surface);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
 body {
   background: var(--bg);
   color: var(--text);
