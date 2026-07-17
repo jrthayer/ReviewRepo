@@ -296,7 +296,9 @@
     /* ── Tag input ── */
     .tags-label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
     .tags-label-row label { margin: 0; }
-    #tag-input-wrap { position: relative; }
+    .tags-actions { display: inline-flex; align-items: center; gap: 0.4rem; }
+    #tag-input-wrap { position: relative; display: inline-flex; align-items: center; gap: 0.3rem; }
+    #tag-input-wrap button { padding: 0.25rem 0.5rem !important; min-width: auto !important; }
     .tag-chips {
       display: flex; flex-direction: column; align-items: stretch; gap: 0.15rem;
       margin-bottom: 0.35rem;
@@ -339,8 +341,10 @@
     .tag-chip button:hover { color: var(--text); opacity: 1; }
     #tag-suggestions {
       position: absolute;
+      top: 100%;
+      right: 0;
       z-index: 20;
-      width: 100%;
+      min-width: 220px;
       background: var(--surface);
       border: 1px solid var(--border);
       border-top: none;
@@ -613,7 +617,16 @@
       <div class="dyn-section">
         <div class="tags-label-row">
           <label>Tags</label>
-          <span>
+          <span class="tags-actions">
+            <button type="button" class="sm secondary" id="add-tag-btn" onclick="startAddTag(event)" title="Add a tag to this review">+ Add Tag</button>
+            <span id="tag-input-wrap" style="display:none">
+              <input id="tag-input" type="text" class="save-block-input" placeholder="Type to add or create a tag..."
+                     oninput="filterTagSuggestions()" onfocus="filterTagSuggestions()"
+                     onkeydown="onTagKeydown(event)" autocomplete="off">
+              <div id="tag-suggestions"></div>
+              <button type="button" onmousedown="event.preventDefault()" onclick="confirmAddTagFromInput()" title="Add tag">&check;</button>
+              <button type="button" onmousedown="event.preventDefault()" onclick="cancelAddTag()" title="Cancel">&times;</button>
+            </span>
             <button type="button" class="sm secondary" id="add-tagcat-btn" onclick="startAddTagCategory()" title="Add a new tag category">+ Add Category</button>
             <span id="add-tagcat-editor" style="display:none">
               <input type="text" id="new-tagcat-name" class="save-block-input" placeholder="Category name..."
@@ -624,12 +637,6 @@
           </span>
         </div>
         <div id="tags-chips" class="tag-chips"></div>
-        <div id="tag-input-wrap">
-          <input id="tag-input" type="text" placeholder="Type to add or create a tag..."
-                 oninput="filterTagSuggestions()" onfocus="filterTagSuggestions()"
-                 onkeydown="onTagKeydown(event)" autocomplete="off">
-          <div id="tag-suggestions"></div>
-        </div>
       </div>
 
       <label>Summary (short tagline)
@@ -2130,25 +2137,53 @@ function registerTag(name, category) {
 // to the review immediately — no category prompt at creation time. A tag only
 // ever gets a category by being dragged onto a category line afterward (see
 // onTagLineDrop below), same as any other uncategorized tag.
+// Adding a tag any way (typed + Enter/✓, or clicking a suggestion) closes
+// the "+ Add Tag" editor afterward — see cancelAddTag — same one-shot
+// behavior as "+ Add Category". Click "+ Add Tag" again for another one.
 function addTag(raw) {
   const tag = raw.trim();
   if (!tag) return;
-  set('tag-input', '');
-  closeTagSuggestions();
-  if (currentTags.some(t => t.toLowerCase() === tag.toLowerCase())) return;
 
-  const existing = tagRegistry.find(t => t.name.toLowerCase() === tag.toLowerCase());
-  if (!existing) registerTag(tag, '');
+  if (!currentTags.some(t => t.toLowerCase() === tag.toLowerCase())) {
+    const existing = tagRegistry.find(t => t.name.toLowerCase() === tag.toLowerCase());
+    if (!existing) registerTag(tag, '');
+    currentTags.push(existing ? existing.name : tag);
+    renderTags();
+    updatePreview();
+  }
 
-  currentTags.push(existing ? existing.name : tag);
-  renderTags();
-  updatePreview();
+  cancelAddTag();
 }
 
 function removeTagAt(i) {
   currentTags.splice(i, 1);
   renderTags();
   updatePreview();
+}
+
+// "+ Add Tag" swaps for the tag-input bar (same trigger/editor shape as
+// "+ Add Category"), including closing again once a tag's added — see
+// addTag/cancelAddTag.
+function startAddTag(e) {
+  e.stopPropagation();
+  document.getElementById('add-tag-btn').style.display = 'none';
+  const wrap = document.getElementById('tag-input-wrap');
+  wrap.style.display = '';
+  const input = document.getElementById('tag-input');
+  input.value = '';
+  input.focus();
+}
+
+function cancelAddTag() {
+  document.getElementById('add-tag-btn').style.display = '';
+  document.getElementById('tag-input-wrap').style.display = 'none';
+  closeTagSuggestions();
+}
+
+// The ✓ button next to the input — same effect as pressing Enter with no
+// suggestion highlighted (addTag already handles trim/dedupe/create-vs-attach).
+function confirmAddTagFromInput() {
+  addTag(document.getElementById('tag-input').value);
 }
 
 function closeTagSuggestions() {
@@ -2209,6 +2244,12 @@ function onTagKeydown(e) {
 
   if (e.key === 'Backspace' && !e.target.value && currentTags.length) {
     removeTagAt(currentTags.length - 1);
+    return;
+  }
+
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    cancelAddTag();
   }
 }
 
@@ -2678,7 +2719,7 @@ function b64decode(b64) {
       document.getElementById('game-results').className = '';
     }
     if (!e.target.closest('#tag-input-wrap')) {
-      closeTagSuggestions();
+      cancelAddTag();
     }
     if (!e.target.closest('.blocks-dropdown-wrap')) {
       closeBlocksDropdown();
