@@ -325,7 +325,6 @@
     }
     .tag-group-delete-btn:hover { color: var(--red); opacity: 1; }
     .tag-group-delete-confirm { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.68rem; color: var(--muted); }
-    .tag-group-delete-confirm button { padding: 0.15rem 0.35rem !important; min-width: auto !important; font-size: 0.7rem; }
     .tag-chip {
       display: flex; align-items: center; gap: 0.3rem;
       background: var(--border); color: var(--text);
@@ -630,7 +629,7 @@
             <button type="button" class="sm secondary" id="add-tagcat-btn" onclick="startAddTagCategory()" title="Add a new tag category">+ Add Category</button>
             <span id="add-tagcat-editor" style="display:none">
               <input type="text" id="new-tagcat-name" class="save-block-input" placeholder="Category name..."
-                     onkeydown="onNewTagCategoryKeydown(event)" onblur="cancelAddTagCategory()">
+                     onkeydown="onInlineEditorKeydown(event, confirmAddTagCategory, cancelAddTagCategory)" onblur="cancelAddTagCategory()">
               <button type="button" onmousedown="event.preventDefault()" onclick="confirmAddTagCategory()" title="Save category">&check;</button>
               <button type="button" onmousedown="event.preventDefault()" onclick="cancelAddTagCategory()" title="Cancel">&times;</button>
             </span>
@@ -665,7 +664,7 @@
             <button type="button" id="link-btn" onclick="startInsertLink()" title="Insert link">Link</button>
             <span id="link-editor" style="display:none">
               <input type="text" id="link-url" class="save-block-input" placeholder="https://..."
-                     onkeydown="onLinkUrlKeydown(event)" onblur="cancelInsertLink()">
+                     onkeydown="onInlineEditorKeydown(event, confirmInsertLink, cancelInsertLink)" onblur="cancelInsertLink()">
               <button type="button" onmousedown="event.preventDefault()" onclick="confirmInsertLink()" title="Insert link">&check;</button>
               <button type="button" onmousedown="event.preventDefault()" onclick="cancelInsertLink()" title="Cancel">&times;</button>
             </span>
@@ -680,7 +679,7 @@
             <button type="button" id="save-block-btn" onclick="startSaveCustomBlock()" title="Save the selected text as a reusable block">+ Save Block</button>
             <span id="save-block-editor" style="display:none">
               <input type="text" id="save-block-name" class="save-block-input" placeholder="Block name..."
-                     onkeydown="onSaveBlockNameKeydown(event)" onblur="cancelSaveCustomBlock()">
+                     onkeydown="onInlineEditorKeydown(event, confirmSaveCustomBlock, cancelSaveCustomBlock)" onblur="cancelSaveCustomBlock()">
               <button type="button" onmousedown="event.preventDefault()" onclick="confirmSaveCustomBlock()" title="Save block">&check;</button>
               <button type="button" onmousedown="event.preventDefault()" onclick="cancelSaveCustomBlock()" title="Cancel">&times;</button>
             </span>
@@ -689,7 +688,7 @@
             <button type="button" id="save-tab-btn" onclick="startSaveCustomTab()" title="Save the active tab as a reusable saved tab">+ Save Tab</button>
             <span id="save-tab-editor" style="display:none">
               <input type="text" id="save-tab-name" class="save-block-input" placeholder="Tab name..."
-                     onkeydown="onSaveTabNameKeydown(event)" onblur="cancelSaveCustomTab()">
+                     onkeydown="onInlineEditorKeydown(event, confirmSaveCustomTab, cancelSaveCustomTab)" onblur="cancelSaveCustomTab()">
               <button type="button" onmousedown="event.preventDefault()" onclick="confirmSaveCustomTab()" title="Save tab">&check;</button>
               <button type="button" onmousedown="event.preventDefault()" onclick="cancelSaveCustomTab()" title="Cancel">&times;</button>
             </span>
@@ -806,6 +805,51 @@ const DATA_COMMIT_IDENTITY = { name: 'Review Admin', email: 'review-admin@localh
 const v   = id => document.getElementById(id).value.trim();
 const set = (id, val) => { document.getElementById(id).value = val; };
 const today = () => new Date().toISOString().slice(0, 10);
+
+// ── Inline editor helper ────────────────────────────────────────────────────
+// The default pattern for a small "click to add/rename/insert something" UI
+// in this admin tool: a fixed trigger element and a fixed editor element (an
+// input plus ✓/✗ buttons) swap visibility. Use these three for any new one
+// instead of hand-rolling the show/hide/focus/keydown wiring again — see the
+// existing callers (startAddTagCategory, startInsertLink, startSaveCustomBlock,
+// startSaveCustomTab, startAddTag, startDeleteReview) for the shape.
+function startInlineEditor(triggerId, editorId, inputId, opts = {}) {
+  document.getElementById(triggerId).style.display = 'none';
+  document.getElementById(editorId).style.display = '';
+  if (inputId) {
+    const input = document.getElementById(inputId);
+    input.value = opts.value ?? '';
+    input.focus();
+    if (opts.select) input.select();
+  }
+}
+
+function cancelInlineEditor(triggerId, editorId) {
+  document.getElementById(triggerId).style.display = '';
+  document.getElementById(editorId).style.display = 'none';
+}
+
+// Enter confirms, Escape cancels — wire an editor input's onkeydown to this:
+// onkeydown="onInlineEditorKeydown(event, confirmX, cancelX)". Callers that
+// need extra key handling beyond confirm/cancel (e.g. the tag input's arrow
+// keys and suggestion picking) keep their own keydown handler instead.
+function onInlineEditorKeydown(e, onConfirm, onCancel) {
+  if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
+  if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+}
+
+// Shared "Delete X?" ✓/✗ confirmation content for list rows (custom blocks,
+// saved tabs, tag categories) — callers wrap this in whatever container
+// fits their context (a dropdown row vs. an inline tag-chip line).
+function deleteConfirmRow(label, onConfirmCall, onCancelCall) {
+  return `
+    <span>Delete "${escHtml(label)}"?</span>
+    <span>
+      <button type="button" class="dropdown-remove" onclick="event.stopPropagation(); ${onConfirmCall}" title="Confirm delete">&check;</button>
+      <button type="button" class="dropdown-remove" onclick="event.stopPropagation(); ${onCancelCall}" title="Cancel">&times;</button>
+    </span>
+  `;
+}
 
 // ── Config ───────────────────────────────────────────────────────────────────
 function getCfg() {
@@ -1129,13 +1173,11 @@ async function saveReview() {
 
 function startDeleteReview() {
   if (!editingId) return;
-  document.getElementById('delete-btn').style.display = 'none';
-  document.getElementById('delete-confirm').style.display = '';
+  startInlineEditor('delete-btn', 'delete-confirm', null);
 }
 
 function cancelDeleteReview() {
-  document.getElementById('delete-btn').style.display = 'inline-block';
-  document.getElementById('delete-confirm').style.display = 'none';
+  cancelInlineEditor('delete-btn', 'delete-confirm');
 }
 
 async function confirmDeleteReview() {
@@ -1263,24 +1305,12 @@ function startInsertLink() {
   const start = textarea.selectionStart;
   const end = textarea.selectionEnd;
   pendingLinkSelection = { start, end, text: textarea.value.slice(start, end) || 'link text' };
-
-  document.getElementById('link-btn').style.display = 'none';
-  document.getElementById('link-editor').style.display = '';
-  const input = document.getElementById('link-url');
-  input.value = 'https://';
-  input.focus();
-  input.select();
+  startInlineEditor('link-btn', 'link-editor', 'link-url', { value: 'https://', select: true });
 }
 
 function cancelInsertLink() {
   pendingLinkSelection = null;
-  document.getElementById('link-btn').style.display = '';
-  document.getElementById('link-editor').style.display = 'none';
-}
-
-function onLinkUrlKeydown(e) {
-  if (e.key === 'Enter') { e.preventDefault(); confirmInsertLink(); }
-  if (e.key === 'Escape') { e.preventDefault(); cancelInsertLink(); }
+  cancelInlineEditor('link-btn', 'link-editor');
 }
 
 function confirmInsertLink() {
@@ -1320,11 +1350,7 @@ function renderCustomBlocks() {
     if (confirmingBlockDeleteId === b.id) {
       return `
         <div class="dropdown-item dropdown-item-confirm">
-          <span>Delete "${escHtml(b.name)}"?</span>
-          <span>
-            <button type="button" class="dropdown-remove" onclick="event.stopPropagation(); confirmDeleteCustomBlock('${b.id}')" title="Confirm delete">&check;</button>
-            <button type="button" class="dropdown-remove" onclick="event.stopPropagation(); cancelDeleteCustomBlock()" title="Cancel">&times;</button>
-          </span>
+          ${deleteConfirmRow(b.name, `confirmDeleteCustomBlock('${b.id}')`, `cancelDeleteCustomBlock()`)}
         </div>
       `;
     }
@@ -1353,22 +1379,12 @@ function startSaveCustomBlock() {
   if (!selected.trim()) { setSt('blocks-status', 'Select the text you want to save as a block first.', true); return; }
 
   pendingBlockContent = selected;
-  document.getElementById('save-block-btn').style.display = 'none';
-  document.getElementById('save-block-editor').style.display = '';
-  const input = document.getElementById('save-block-name');
-  input.value = '';
-  input.focus();
+  startInlineEditor('save-block-btn', 'save-block-editor', 'save-block-name');
 }
 
 function cancelSaveCustomBlock() {
   pendingBlockContent = null;
-  document.getElementById('save-block-btn').style.display = '';
-  document.getElementById('save-block-editor').style.display = 'none';
-}
-
-function onSaveBlockNameKeydown(e) {
-  if (e.key === 'Enter') { e.preventDefault(); confirmSaveCustomBlock(); }
-  if (e.key === 'Escape') { e.preventDefault(); cancelSaveCustomBlock(); }
+  cancelInlineEditor('save-block-btn', 'save-block-editor');
 }
 
 async function confirmSaveCustomBlock() {
@@ -1835,11 +1851,7 @@ function renderTabAddDropdown() {
     if (confirmingTabDeleteId === t.id) {
       return `
         <div class="dropdown-item dropdown-item-confirm">
-          <span>Delete "${escHtml(t.name)}"?</span>
-          <span>
-            <button type="button" class="dropdown-remove" onclick="event.stopPropagation(); confirmDeleteCustomTab('${t.id}')" title="Confirm delete">&check;</button>
-            <button type="button" class="dropdown-remove" onclick="event.stopPropagation(); cancelDeleteCustomTab()" title="Cancel">&times;</button>
-          </span>
+          ${deleteConfirmRow(t.name, `confirmDeleteCustomTab('${t.id}')`, `cancelDeleteCustomTab()`)}
         </div>
       `;
     }
@@ -1878,23 +1890,12 @@ function startSaveCustomTab() {
   if (!current || !current.content.trim()) { setSt('tabs-status', 'The active tab has no content to save.', true); return; }
 
   pendingTabContent = current.content;
-  document.getElementById('save-tab-btn').style.display = 'none';
-  document.getElementById('save-tab-editor').style.display = '';
-  const input = document.getElementById('save-tab-name');
-  input.value = current.name;
-  input.focus();
-  input.select();
+  startInlineEditor('save-tab-btn', 'save-tab-editor', 'save-tab-name', { value: current.name, select: true });
 }
 
 function cancelSaveCustomTab() {
   pendingTabContent = null;
-  document.getElementById('save-tab-btn').style.display = '';
-  document.getElementById('save-tab-editor').style.display = 'none';
-}
-
-function onSaveTabNameKeydown(e) {
-  if (e.key === 'Enter') { e.preventDefault(); confirmSaveCustomTab(); }
-  if (e.key === 'Escape') { e.preventDefault(); cancelSaveCustomTab(); }
+  cancelInlineEditor('save-tab-btn', 'save-tab-editor');
 }
 
 async function confirmSaveCustomTab() {
@@ -1982,16 +1983,12 @@ function renderTags() {
     const label = renamingTagCategoryId === cat.id
       ? `<span class="tag-group-rename-editor">
            <input type="text" class="save-block-input" id="rename-tagcat-name" value="${escHtml(cat.name)}"
-                  onkeydown="onRenameTagCategoryKeydown(event, '${cat.id}')" onblur="cancelRenameTagCategory()">
+                  onkeydown="onInlineEditorKeydown(event, () => confirmRenameTagCategory('${cat.id}'), cancelRenameTagCategory)" onblur="cancelRenameTagCategory()">
            <button type="button" onmousedown="event.preventDefault()" onclick="confirmRenameTagCategory('${cat.id}')" title="Save name">&check;</button>
            <button type="button" onmousedown="event.preventDefault()" onclick="cancelRenameTagCategory()" title="Cancel">&times;</button>
          </span>`
       : confirmingTagCatDeleteId === cat.id
-        ? `<span class="tag-group-delete-confirm">
-             Delete "${escHtml(cat.name)}"?
-             <button type="button" onmousedown="event.preventDefault()" onclick="confirmDeleteTagCategory('${cat.id}')" title="Confirm delete">&check;</button>
-             <button type="button" onmousedown="event.preventDefault()" onclick="cancelDeleteTagCategory()" title="Cancel">&times;</button>
-           </span>`
+        ? `<span class="tag-group-delete-confirm">${deleteConfirmRow(cat.name, `confirmDeleteTagCategory('${cat.id}')`, `cancelDeleteTagCategory()`)}</span>`
         : cat.id
           ? `<span class="tag-group-label tag-group-label-editable" onclick="startRenameTagCategory('${cat.id}')" title="Click to rename">${escHtml(cat.name)}</span>
              <button type="button" class="tag-group-delete-btn" onclick="startDeleteTagCategory('${cat.id}')" title="Delete this category">&times;</button>`
@@ -2024,11 +2021,6 @@ function startRenameTagCategory(id) {
 function cancelRenameTagCategory() {
   renamingTagCategoryId = null;
   renderTags();
-}
-
-function onRenameTagCategoryKeydown(e, id) {
-  if (e.key === 'Enter') { e.preventDefault(); confirmRenameTagCategory(id); }
-  if (e.key === 'Escape') { e.preventDefault(); cancelRenameTagCategory(); }
 }
 
 function confirmRenameTagCategory(id) {
@@ -2166,17 +2158,11 @@ function removeTagAt(i) {
 // addTag/cancelAddTag.
 function startAddTag(e) {
   e.stopPropagation();
-  document.getElementById('add-tag-btn').style.display = 'none';
-  const wrap = document.getElementById('tag-input-wrap');
-  wrap.style.display = '';
-  const input = document.getElementById('tag-input');
-  input.value = '';
-  input.focus();
+  startInlineEditor('add-tag-btn', 'tag-input-wrap', 'tag-input');
 }
 
 function cancelAddTag() {
-  document.getElementById('add-tag-btn').style.display = '';
-  document.getElementById('tag-input-wrap').style.display = 'none';
+  cancelInlineEditor('add-tag-btn', 'tag-input-wrap');
   closeTagSuggestions();
 }
 
@@ -2271,25 +2257,15 @@ function clearTagsDirty() {
 
 // ── Tag categories ──────────────────────────────────────────────────────────
 // "+ Add Category" follows the same trigger/editor-swap shape as "+ Save
-// Block" (startSaveCustomBlock). There's no delete-category UI — renaming
-// (see startRenameTagCategory in renderTags above) covers fixing a mistake
-// without needing to delete-and-recreate.
+// Block" (startSaveCustomBlock). Renaming (startRenameTagCategory in
+// renderTags above) and deleting (startDeleteTagCategory below) are both
+// inline, per-category actions in the tag chip editor — no separate list UI.
 function startAddTagCategory() {
-  document.getElementById('add-tagcat-btn').style.display = 'none';
-  document.getElementById('add-tagcat-editor').style.display = '';
-  const input = document.getElementById('new-tagcat-name');
-  input.value = '';
-  input.focus();
+  startInlineEditor('add-tagcat-btn', 'add-tagcat-editor', 'new-tagcat-name');
 }
 
 function cancelAddTagCategory() {
-  document.getElementById('add-tagcat-btn').style.display = '';
-  document.getElementById('add-tagcat-editor').style.display = 'none';
-}
-
-function onNewTagCategoryKeydown(e) {
-  if (e.key === 'Enter') { e.preventDefault(); confirmAddTagCategory(); }
-  if (e.key === 'Escape') { e.preventDefault(); cancelAddTagCategory(); }
+  cancelInlineEditor('add-tagcat-btn', 'add-tagcat-editor');
 }
 
 function confirmAddTagCategory() {
