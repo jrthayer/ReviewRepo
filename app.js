@@ -1,4 +1,6 @@
 let reviews = [];
+let tagRegistry = [];
+let tagCategories = [];
 let expandedId = null;
 let activeTag = null;
 let expandedBodyTab = 'steam';
@@ -6,6 +8,8 @@ let expandedSubTab = 0;
 
 async function init() {
   reviews = JSON.parse(localStorage.getItem('gh_reviews_cache') || '[]');
+  tagRegistry = JSON.parse(localStorage.getItem('gh_tags_cache') || '[]');
+  tagCategories = JSON.parse(localStorage.getItem('gh_tagcats_cache') || '[]');
 
   const requestedId = new URLSearchParams(location.search).get('review');
   if (requestedId && reviews.some(r => r.id === requestedId)) {
@@ -19,20 +23,37 @@ async function init() {
   }
 }
 
-function allTags() {
+// All distinct tag names in use, ordered by their category's position in
+// tagCategories (unknown categories after known ones, uncategorized last),
+// alphabetical within each group — so the filter bar's grouping stays stable.
+function allTagNamesSorted() {
   const set = new Set();
   reviews.forEach(r => (r.tags || []).forEach(t => set.add(t)));
-  return [...set].sort((a, b) => a.localeCompare(b));
+
+  const categoryOf = new Map(tagRegistry.map(t => [t.name.toLowerCase(), t.category || '']));
+  const categoryOrder = new Map(tagCategories.map((c, i) => [c.name, i]));
+  const rank = name => {
+    const cat = categoryOf.get(name.toLowerCase()) || '';
+    if (!cat) return Infinity;
+    return categoryOrder.has(cat) ? categoryOrder.get(cat) : categoryOrder.size;
+  };
+
+  return [...set].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 }
 
 function renderTagFilters() {
   const el = document.getElementById('tag-filters');
-  const tags = allTags();
-  if (!tags.length) { el.innerHTML = ''; return; }
+  const names = allTagNamesSorted();
+  if (!names.length) { el.innerHTML = ''; return; }
+
+  const groups = groupTagNames(names, tagRegistry);
+  const filterBtn = name => `<button class="tag-filter ${activeTag === name ? 'active' : ''}" data-tag="${escHtml(name)}">${escHtml(name)}</button>`;
 
   el.innerHTML = [
     `<button class="tag-filter ${activeTag === null ? 'active' : ''}" data-tag="">All</button>`,
-    ...tags.map(t => `<button class="tag-filter ${activeTag === t ? 'active' : ''}" data-tag="${escHtml(t)}">${escHtml(t)}</button>`),
+    ...groups.map(g => g.category
+      ? `<div class="tag-group"><span class="tag-group-label">${escHtml(g.category)}</span>${g.entries.map(e => filterBtn(e.name)).join('')}</div>`
+      : g.entries.map(e => filterBtn(e.name)).join('')),
   ].join('');
 
   el.querySelectorAll('.tag-filter').forEach(btn => {
@@ -63,6 +84,7 @@ function render() {
     activeTabId: expandedBodyTab,
     activeSubIndex: expandedSubTab,
     permalinkHref: `?review=${r.id}`,
+    tagRegistry,
   })).join('');
 
   app.querySelectorAll('.card').forEach(card => {

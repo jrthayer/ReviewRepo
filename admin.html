@@ -285,6 +285,7 @@
     #save-row { display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap; padding-top: 0.25rem; }
     .status { font-size: 0.78rem; }
     .status.ok { color: var(--green); }
+    .dirty-indicator { font-size: 0.78rem; font-weight: 600; color: var(--amber); }
 
     #bbcode-warnings { font-size: 0.78rem; color: var(--amber); min-height: 1.1em; margin-top: 0.3rem; }
 
@@ -293,17 +294,44 @@
     .import-actions { display: flex; align-items: center; gap: 0.6rem; }
 
     /* ── Tag input ── */
+    .tags-label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
+    .tags-label-row label { margin: 0; }
     #tag-input-wrap { position: relative; }
     .tag-chips {
-      display: flex; flex-wrap: wrap; gap: 0.35rem;
+      display: flex; flex-direction: column; align-items: stretch; gap: 0.15rem;
       margin-bottom: 0.35rem;
     }
+    .tag-chip-group {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem;
+      min-height: 1.7rem; padding: 0.15rem 0.3rem; border-radius: 4px;
+      transition: background 0.12s;
+    }
+    .tag-chip-group.drag-over { background: var(--border); outline: 1px dashed var(--accent); }
+    .tag-group-label {
+      font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.04em; color: var(--muted); opacity: 0.8;
+      min-width: 4.5rem;
+    }
+    .tag-group-label-editable { cursor: pointer; }
+    .tag-group-label-editable:hover { color: var(--text); text-decoration: underline; }
+    .tag-group-rename-editor { display: inline-flex; align-items: center; gap: 0.3rem; }
+    .tag-group-rename-editor input { width: 6rem; }
+    .tag-group-rename-editor button { padding: 0.2rem 0.4rem !important; min-width: auto !important; }
+    .tag-group-delete-btn {
+      background: none; color: var(--muted); padding: 0 0.2rem;
+      font-size: 0.7rem; line-height: 1; border-radius: 50%;
+    }
+    .tag-group-delete-btn:hover { color: var(--red); opacity: 1; }
+    .tag-group-delete-confirm { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.68rem; color: var(--muted); }
+    .tag-group-delete-confirm button { padding: 0.15rem 0.35rem !important; min-width: auto !important; font-size: 0.7rem; }
     .tag-chip {
       display: flex; align-items: center; gap: 0.3rem;
       background: var(--border); color: var(--text);
       border-radius: 999px; padding: 0.15rem 0.4rem 0.15rem 0.65rem;
       font-size: 0.78rem;
+      cursor: grab;
     }
+    .tag-chip:active { cursor: grabbing; }
     .tag-chip button {
       background: none; color: var(--muted); padding: 0 0.2rem;
       font-size: 0.85rem; line-height: 1; border-radius: 50%;
@@ -329,6 +357,9 @@
     }
     .tag-suggestion:hover, .tag-suggestion.hl { background: var(--border); }
     .tag-suggestion.create { color: var(--muted); font-style: italic; }
+    .tag-suggestion-cat { color: var(--muted); font-size: 0.72rem; }
+    #add-tagcat-editor { display: inline-flex; align-items: center; gap: 0.3rem; }
+    #add-tagcat-editor button { padding: 0.25rem 0.5rem !important; min-width: auto !important; }
 
     /* ── Steam library search ── */
     #steam-search-wrap { position: relative; }
@@ -576,7 +607,18 @@
       </label>
 
       <div class="dyn-section">
-        <label>Tags</label>
+        <div class="tags-label-row">
+          <label>Tags</label>
+          <span>
+            <button type="button" class="sm secondary" id="add-tagcat-btn" onclick="startAddTagCategory()" title="Add a new tag category">+ Add Category</button>
+            <span id="add-tagcat-editor" style="display:none">
+              <input type="text" id="new-tagcat-name" class="save-block-input" placeholder="Category name..."
+                     onkeydown="onNewTagCategoryKeydown(event)" onblur="cancelAddTagCategory()">
+              <button type="button" onmousedown="event.preventDefault()" onclick="confirmAddTagCategory()" title="Save category">&check;</button>
+              <button type="button" onmousedown="event.preventDefault()" onclick="cancelAddTagCategory()" title="Cancel">&times;</button>
+            </span>
+          </span>
+        </div>
         <div id="tags-chips" class="tag-chips"></div>
         <div id="tag-input-wrap">
           <input id="tag-input" type="text" placeholder="Type to add or create a tag..."
@@ -663,6 +705,7 @@
         <button type="button" class="secondary" id="export-btn" onclick="exportReview()" title="Copy the whole review as plain text, e.g. to paste into a word processor for spelling/grammar checks">Export</button>
         <button type="button" class="secondary" id="import-btn" onclick="startImportReview()" title="Paste back an edited export to update this review">Import</button>
         <span id="save-status" class="status"></span>
+        <span id="tags-dirty-indicator" class="dirty-indicator" style="display:none" title="Tag/category changes are saved together with the review, not pushed individually">&#9679; Unsaved tag changes</span>
       </div>
 
       <div id="import-panel" style="display:none">
@@ -724,6 +767,12 @@ let customTabs          = []; // [{ id, name, content }] — saved tab templates
 let tabsSha             = null;
 let pendingTabContent   = null; // content of the active tab staged while naming a new saved tab
 let confirmingTabDeleteId = null; // saved-tab id currently showing its inline "delete?" confirmation
+let tagCategories        = []; // [{ id, name }] — saved tag categories, stored in data/tag-categories.json
+let tagRegistry          = []; // [{ id, name, category }] — global tag name → category registry, stored in data/tags.json (category is a tagCategories name, or '' for uncategorized)
+let draggedTagIndex          = null; // index into currentTags of the chip currently being dragged between category lines
+let renamingTagCategoryId    = null; // category id currently showing its inline rename editor (input + confirm/cancel) in the tag chip editor
+let confirmingTagCatDeleteId = null; // category id currently showing its inline "delete?" confirmation in the tag chip editor
+let tagsDirty                = false; // true when tagRegistry/tagCategories have local edits not yet pushed to GitHub — committed together with the next review save (ghCommitFiles), not per-action
 
 // ── Constants & helpers ────────────────────────────────────────────────────────
 const FORMAT_TAGS = {
@@ -740,6 +789,12 @@ const FORMAT_TAGS = {
 };
 
 const PROXY = url => 'https://corsproxy.io/?' + encodeURIComponent(url);
+
+// Identity used for automated data-saving commits (reviews/blocks/tabs/tag
+// categories/tag registry) — deliberately not a verified email on any GitHub
+// account, so these commits don't count toward the PAT owner's contribution
+// graph the way commits authored as themselves would.
+const DATA_COMMIT_IDENTITY = { name: 'Review Admin', email: 'review-admin@localhost' };
 
 const v   = id => document.getElementById(id).value.trim();
 const set = (id, val) => { document.getElementById(id).value = val; };
@@ -774,6 +829,9 @@ async function ghReq(url, opts = {}) {
   const res = await fetch(url, {
     ...opts,
     headers,
+    cache: 'no-store', // GitHub's Contents API GETs are cacheable (Cache-Control: private, max-age=60);
+                        // without this, a GET soon after a PUT can return the pre-PUT sha from the
+                        // browser's HTTP cache, and the next PUT gets rejected as a conflict.
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   return res;
@@ -807,6 +865,8 @@ async function ghPutJson(path, data, sha, msg) {
         message: msg,
         content: b64encode(JSON.stringify(data, null, 2)),
         branch,
+        author: DATA_COMMIT_IDENTITY,
+        committer: DATA_COMMIT_IDENTITY,
         ...(sha ? { sha } : {}),
       },
     }
@@ -814,6 +874,92 @@ async function ghPutJson(path, data, sha, msg) {
   if (!res.ok) { const e = await res.json(); throw new Error(e.message || `GitHub ${res.status}`); }
   const result = await res.json();
   return result.content.sha;
+}
+
+// ── Git Data API (multi-file atomic commits) ────────────────────────────────
+// The Contents API above (ghGetJson/ghPutJson) only ever touches one file per
+// commit. Saving a review together with pending tag/category changes (see
+// tagsDirty) needs one commit spanning three files, which means dropping down
+// to git's actual object model: create a blob per file, a tree referencing
+// them, a commit pointing at that tree, then move the branch ref to it.
+async function ghGetRef(branch) {
+  const { owner, repo } = getCfg();
+  const res = await ghReq(`https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${branch}`);
+  if (!res.ok) { const e = await res.json(); throw new Error(e.message || `GitHub ${res.status}`); }
+  const result = await res.json();
+  return result.object.sha;
+}
+
+async function ghGetCommitTree(commitSha) {
+  const { owner, repo } = getCfg();
+  const res = await ghReq(`https://api.github.com/repos/${owner}/${repo}/git/commits/${commitSha}`);
+  if (!res.ok) { const e = await res.json(); throw new Error(e.message || `GitHub ${res.status}`); }
+  const result = await res.json();
+  return result.tree.sha;
+}
+
+async function ghCreateBlob(content) {
+  const { owner, repo } = getCfg();
+  const res = await ghReq(`https://api.github.com/repos/${owner}/${repo}/git/blobs`, {
+    method: 'POST',
+    body: { content: b64encode(content), encoding: 'base64' },
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.message || `GitHub ${res.status}`); }
+  const result = await res.json();
+  return result.sha;
+}
+
+async function ghCreateTree(baseTreeSha, entries) {
+  const { owner, repo } = getCfg();
+  const res = await ghReq(`https://api.github.com/repos/${owner}/${repo}/git/trees`, {
+    method: 'POST',
+    body: { base_tree: baseTreeSha, tree: entries },
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.message || `GitHub ${res.status}`); }
+  const result = await res.json();
+  return result.sha;
+}
+
+async function ghCreateCommit(message, treeSha, parentSha) {
+  const { owner, repo } = getCfg();
+  const res = await ghReq(`https://api.github.com/repos/${owner}/${repo}/git/commits`, {
+    method: 'POST',
+    body: { message, tree: treeSha, parents: [parentSha], author: DATA_COMMIT_IDENTITY, committer: DATA_COMMIT_IDENTITY },
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.message || `GitHub ${res.status}`); }
+  const result = await res.json();
+  return result.sha;
+}
+
+async function ghUpdateRef(branch, commitSha) {
+  const { owner, repo } = getCfg();
+  const res = await ghReq(`https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+    method: 'PATCH',
+    body: { sha: commitSha },
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.message || `GitHub ${res.status}`); }
+}
+
+// Commits multiple JSON files atomically in a single commit. `files` is
+// [{ path, data }]; returns the new commit sha and each file's blob sha (which
+// is the same value the Contents API reports as that file's "sha" at HEAD,
+// since git blob shas are content-addressed — callers can assign it straight
+// to their usual *Sha tracking var without a follow-up fetch).
+async function ghCommitFiles(files, message) {
+  const { branch } = getCfg();
+  const headCommitSha = await ghGetRef(branch);
+  const baseTreeSha = await ghGetCommitTree(headCommitSha);
+
+  const blobShas = [];
+  for (const f of files) {
+    blobShas.push(await ghCreateBlob(JSON.stringify(f.data, null, 2)));
+  }
+  const entries = files.map((f, i) => ({ path: f.path, mode: '100644', type: 'blob', sha: blobShas[i] }));
+
+  const treeSha = await ghCreateTree(baseTreeSha, entries);
+  const commitSha = await ghCreateCommit(message, treeSha, headCommitSha);
+  await ghUpdateRef(branch, commitSha);
+  return { commitSha, blobShas };
 }
 
 async function fetchFile() {
@@ -843,9 +989,30 @@ async function pushTabsFile(list, msg) {
   tabsSha = await ghPutJson('data/custom-tabs.json', list, tabsSha, msg || 'Update custom-tabs.json');
 }
 
+// Tag categories/registry have no standalone push wrapper — they're only ever
+// written bundled with a review save, via ghCommitFiles in saveReview() (see
+// tagsDirty), never pushed on their own.
+async function fetchTagCategoriesFile() {
+  const { data } = await ghGetJson('data/tag-categories.json');
+  return { categories: data || [] };
+}
+
+async function fetchTagsRegistryFile() {
+  const { data } = await ghGetJson('data/tags.json');
+  return { tags: data || [] };
+}
+
 // ── Review list ───────────────────────────────────────────────────────────────
 function cacheReviews(list) {
   localStorage.setItem('gh_reviews_cache', JSON.stringify(list));
+}
+
+function cacheTagCategories(list) {
+  localStorage.setItem('gh_tagcats_cache', JSON.stringify(list));
+}
+
+function cacheTagRegistry(list) {
+  localStorage.setItem('gh_tags_cache', JSON.stringify(list));
 }
 
 async function loadReviewList() {
@@ -860,6 +1027,8 @@ async function loadReviewList() {
     setSt('settings-status', `Connected — ${reviews.length} review(s).`, false);
     loadCustomBlocksList();
     loadCustomTabsList();
+    loadTagCategoriesList();
+    loadTagRegistryList();
   } catch (e) {
     setSt('settings-status', e.message, true);
   }
@@ -914,10 +1083,29 @@ async function saveReview() {
   setSt('save-status', 'Saving...', false);
   try {
     const { reviews: latest, sha } = await fetchFile();
-    fileSha = sha;
     const idx = latest.findIndex(r => r.id === data.id);
     if (idx >= 0) latest[idx] = data; else latest.push(data);
-    await pushFile(latest, `${idx >= 0 ? 'Update' : 'Add'} review: ${data.id}`);
+
+    if (tagsDirty) {
+      // Bundle the review with the pending tag/category edits into one atomic
+      // commit via the Git Data API, instead of separate Contents-API pushes.
+      const { blobShas } = await ghCommitFiles(
+        [
+          { path: 'data/reviews.json', data: latest },
+          { path: 'data/tag-categories.json', data: tagCategories },
+          { path: 'data/tags.json', data: tagRegistry },
+        ],
+        `${idx >= 0 ? 'Update' : 'Add'} review: ${data.id} (+ tag changes)`
+      );
+      fileSha = blobShas[0];
+      cacheTagCategories(tagCategories);
+      cacheTagRegistry(tagRegistry);
+      clearTagsDirty();
+    } else {
+      fileSha = sha;
+      await pushFile(latest, `${idx >= 0 ? 'Update' : 'Add'} review: ${data.id}`);
+    }
+
     reviews = latest;
     cacheReviews(reviews);
     editingId = data.id;
@@ -1609,6 +1797,30 @@ async function loadCustomTabsList() {
   }
 }
 
+// ── Tag categories & global tag registry (data/tag-categories.json, data/tags.json) ──
+async function loadTagCategoriesList() {
+  try {
+    const { categories } = await fetchTagCategoriesFile();
+    tagCategories = categories;
+    cacheTagCategories(tagCategories);
+    renderTags();
+  } catch (e) {
+    setSt('save-status', e.message, true);
+  }
+}
+
+async function loadTagRegistryList() {
+  try {
+    const { tags } = await fetchTagsRegistryFile();
+    tagRegistry = tags;
+    cacheTagRegistry(tagRegistry);
+    renderTags();
+    updatePreview();
+  } catch (e) {
+    setSt('save-status', e.message, true);
+  }
+}
+
 function renderTabAddDropdown() {
   const el = document.getElementById('tab-add-dropdown');
   if (!el) return;
@@ -1730,29 +1942,207 @@ async function confirmDeleteCustomTab(id) {
 }
 
 // ── Tags ──────────────────────────────────────────────────────────────────────
+// A tag's category is global (looked up in tagRegistry, data/tags.json), not
+// per-review — currentTags/r.tags stay a flat array of tag-name strings, same
+// shape as before categorization existed. See groupTagNames() in shared.js.
 function getAllTags() {
-  const set = new Set();
-  reviews.forEach(r => (r.tags || []).forEach(t => set.add(t)));
-  return [...set].sort((a, b) => a.localeCompare(b));
+  return tagRegistry.map(t => t.name).sort((a, b) => a.localeCompare(b));
 }
 
+// Every known category gets its own line here (even with no tags on this
+// review yet) so it's always a visible drop target — unlike the card/site,
+// which only show categories actually in use. See groupTagNames() in
+// shared.js for that leaner version.
 function renderTags() {
   const box = document.getElementById('tags-chips');
-  box.innerHTML = currentTags.map((t, i) => `
-    <span class="tag-chip">${escHtml(t)}<button type="button" onclick="removeTagAt(${i})">×</button></span>
-  `).join('');
+  const categoryOf = name => tagRegistry.find(t => t.name.toLowerCase() === name.toLowerCase())?.category || '';
+  // Trailing synthetic "Uncategorized" line, not a real category. id must be
+  // falsy-but-not-null: renamingTagCategoryId defaults to null when nothing's
+  // being renamed, and null === null would otherwise put this line into its
+  // own rename editor from the very first render.
+  const lines = [...tagCategories, { id: '', name: '' }];
+
+  const chip = (name, index) => `
+    <span class="tag-chip" draggable="true" ondragstart="onTagChipDragStart(event, ${index})" ondragend="onTagChipDragEnd()">
+      ${escHtml(name)}<button type="button" onclick="removeTagAt(${index})">×</button>
+    </span>`;
+
+  box.innerHTML = lines.map(cat => {
+    const entries = currentTags
+      .map((name, index) => ({ name, index }))
+      .filter(e => categoryOf(e.name) === cat.name);
+
+    const label = renamingTagCategoryId === cat.id
+      ? `<span class="tag-group-rename-editor">
+           <input type="text" class="save-block-input" id="rename-tagcat-name" value="${escHtml(cat.name)}"
+                  onkeydown="onRenameTagCategoryKeydown(event, '${cat.id}')" onblur="cancelRenameTagCategory()">
+           <button type="button" onmousedown="event.preventDefault()" onclick="confirmRenameTagCategory('${cat.id}')" title="Save name">&check;</button>
+           <button type="button" onmousedown="event.preventDefault()" onclick="cancelRenameTagCategory()" title="Cancel">&times;</button>
+         </span>`
+      : confirmingTagCatDeleteId === cat.id
+        ? `<span class="tag-group-delete-confirm">
+             Delete "${escHtml(cat.name)}"?
+             <button type="button" onmousedown="event.preventDefault()" onclick="confirmDeleteTagCategory('${cat.id}')" title="Confirm delete">&check;</button>
+             <button type="button" onmousedown="event.preventDefault()" onclick="cancelDeleteTagCategory()" title="Cancel">&times;</button>
+           </span>`
+        : cat.id
+          ? `<span class="tag-group-label tag-group-label-editable" onclick="startRenameTagCategory('${cat.id}')" title="Click to rename">${escHtml(cat.name)}</span>
+             <button type="button" class="tag-group-delete-btn" onclick="startDeleteTagCategory('${cat.id}')" title="Delete this category">&times;</button>`
+          : `<span class="tag-group-label">Uncategorized</span>`;
+
+    return `
+      <div class="tag-chip-group" ondragover="onTagLineDragOver(event)" ondragleave="onTagLineDragLeave(event)" ondrop="onTagLineDrop(event, '${escHtml(cat.name).replace(/'/g, "\\'")}')">
+        ${label}
+        ${entries.map(e => chip(e.name, e.index)).join('')}
+      </div>`;
+  }).join('');
+
+  if (renamingTagCategoryId !== null) {
+    const input = document.getElementById('rename-tagcat-name');
+    if (input) { input.focus(); input.select(); }
+  }
 }
 
+// Renaming a category swaps its label for the same trigger/editor shape as
+// "+ Add Category" (input + confirm/cancel), pre-filled with the current
+// name. Renaming cascades to every registry tag currently filed under the
+// old name, since a tag's category is a stored name string, not an id —
+// otherwise those tags would silently become uncategorized the moment their
+// category was renamed out from under them.
+function startRenameTagCategory(id) {
+  renamingTagCategoryId = id;
+  renderTags();
+}
+
+function cancelRenameTagCategory() {
+  renamingTagCategoryId = null;
+  renderTags();
+}
+
+function onRenameTagCategoryKeydown(e, id) {
+  if (e.key === 'Enter') { e.preventDefault(); confirmRenameTagCategory(id); }
+  if (e.key === 'Escape') { e.preventDefault(); cancelRenameTagCategory(); }
+}
+
+function confirmRenameTagCategory(id) {
+  const input = document.getElementById('rename-tagcat-name');
+  const name = input ? input.value.trim() : '';
+  renamingTagCategoryId = null;
+
+  const cat = tagCategories.find(c => c.id === id);
+  if (cat && name && cat.name !== name) {
+    const oldName = cat.name;
+    cat.name = name;
+    tagRegistry.forEach(t => { if (t.category === oldName) t.category = name; });
+    markTagsDirty();
+  }
+  renderTags();
+  updatePreview();
+}
+
+function startDeleteTagCategory(id) {
+  confirmingTagCatDeleteId = id;
+  renderTags();
+}
+
+function cancelDeleteTagCategory() {
+  confirmingTagCatDeleteId = null;
+  renderTags();
+}
+
+// Deleting a category falls every registry tag currently filed under it back
+// to uncategorized (category: ''), same idea as the rename cascade above —
+// renderTags() only shows lines for known categories plus the Uncategorized
+// bucket, so a tag left pointing at a since-deleted category name would
+// otherwise vanish from the chip editor entirely (still attached to the
+// review, just with nowhere to render).
+function confirmDeleteTagCategory(id) {
+  confirmingTagCatDeleteId = null;
+  const cat = tagCategories.find(c => c.id === id);
+  if (!cat) { renderTags(); return; }
+
+  tagCategories = tagCategories.filter(c => c.id !== id);
+  tagRegistry.forEach(t => { if (t.category === cat.name) t.category = ''; });
+  markTagsDirty();
+  renderTags();
+  updatePreview();
+}
+
+// Dragging a chip onto a different category line reassigns that tag's
+// category in the global registry (reassignRegistryTag, same as the Manage
+// Tags panel's per-tag <select>) — recategorizing is global, not per-review.
+function onTagChipDragStart(e, index) {
+  draggedTagIndex = index;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', String(index));
+}
+
+function onTagChipDragEnd() {
+  draggedTagIndex = null;
+}
+
+function onTagLineDragOver(e) {
+  if (draggedTagIndex === null) return;
+  e.preventDefault();
+  e.currentTarget.classList.add('drag-over');
+}
+
+function onTagLineDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+function onTagLineDrop(e, category) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const index = draggedTagIndex;
+  draggedTagIndex = null;
+  if (index === null || index === undefined) return;
+
+  const name = currentTags[index];
+  if (!name) return;
+  const entry = tagRegistry.find(t => t.name.toLowerCase() === name.toLowerCase());
+
+  if (!entry) {
+    // Legacy/unregistered tag (predates the registry, or was added outside
+    // this UI) — dropping it onto a category registers it with that category
+    // on the spot, same as any other tag getting categorized by drag.
+    registerTag(name, category);
+    renderTags();
+    updatePreview();
+    return;
+  }
+
+  if ((entry.category || '') === category) return;
+  reassignRegistryTag(entry.id, category);
+}
+
+// Registers a not-yet-known name in the global registry with the given
+// category (used both for brand-new tags typed into the input, uncategorized,
+// and for legacy/unregistered tags that get a category by being dragged onto
+// a category line — see addTag and onTagLineDrop below). Local only — see
+// markTagsDirty() above.
+function registerTag(name, category) {
+  tagRegistry.push({ id: `tag-${Date.now()}`, name, category });
+  markTagsDirty();
+}
+
+// A brand-new tag name is registered uncategorized (category: '') and attached
+// to the review immediately — no category prompt at creation time. A tag only
+// ever gets a category by being dragged onto a category line afterward (see
+// onTagLineDrop below), same as any other uncategorized tag.
 function addTag(raw) {
   const tag = raw.trim();
   if (!tag) return;
-  if (!currentTags.some(t => t.toLowerCase() === tag.toLowerCase())) {
-    currentTags.push(tag);
-    renderTags();
-    updatePreview();
-  }
   set('tag-input', '');
   closeTagSuggestions();
+  if (currentTags.some(t => t.toLowerCase() === tag.toLowerCase())) return;
+
+  const existing = tagRegistry.find(t => t.name.toLowerCase() === tag.toLowerCase());
+  if (!existing) registerTag(tag, '');
+
+  currentTags.push(existing ? existing.name : tag);
+  renderTags();
+  updatePreview();
 }
 
 function removeTagAt(i) {
@@ -1777,7 +2167,11 @@ function filterTagSuggestions() {
 
   if (!hits.length && !q) { box.className = ''; box.innerHTML = ''; return; }
 
-  let html = hits.slice(0, 12).map(t => `<div class="tag-suggestion" onmousedown="addTag('${escHtml(t).replace(/'/g, "\\'")}')">${escHtml(t)}</div>`).join('');
+  const categoryOf = name => tagRegistry.find(t => t.name.toLowerCase() === name.toLowerCase())?.category || '';
+  let html = hits.slice(0, 12).map(t => {
+    const cat = categoryOf(t);
+    return `<div class="tag-suggestion" onmousedown="addTag('${escHtml(t).replace(/'/g, "\\'")}')">${escHtml(t)}${cat ? ` <span class="tag-suggestion-cat">${escHtml(cat)}</span>` : ''}</div>`;
+  }).join('');
   const exactMatch = available.some(t => t.toLowerCase() === q) || currentTags.some(t => t.toLowerCase() === q);
   if (q && !exactMatch) {
     html += `<div class="tag-suggestion create" onmousedown="addTag('${escHtml(q).replace(/'/g, "\\'")}')">+ Create "${escHtml(q)}"</div>`;
@@ -1816,6 +2210,67 @@ function onTagKeydown(e) {
   if (e.key === 'Backspace' && !e.target.value && currentTags.length) {
     removeTagAt(currentTags.length - 1);
   }
+}
+
+// Tag/category edits (add/delete/recategorize) only touch tagRegistry/tagCategories
+// in memory — no GitHub call per action. markTagsDirty() flags that there's a
+// pending change, shown next to the Save button; saveReview() commits both
+// files together with the review itself (via ghCommitFiles), then clears the flag.
+function markTagsDirty() {
+  tagsDirty = true;
+  const el = document.getElementById('tags-dirty-indicator');
+  if (el) el.style.display = '';
+}
+
+function clearTagsDirty() {
+  tagsDirty = false;
+  const el = document.getElementById('tags-dirty-indicator');
+  if (el) el.style.display = 'none';
+}
+
+// ── Tag categories ──────────────────────────────────────────────────────────
+// "+ Add Category" follows the same trigger/editor-swap shape as "+ Save
+// Block" (startSaveCustomBlock). There's no delete-category UI — renaming
+// (see startRenameTagCategory in renderTags above) covers fixing a mistake
+// without needing to delete-and-recreate.
+function startAddTagCategory() {
+  document.getElementById('add-tagcat-btn').style.display = 'none';
+  document.getElementById('add-tagcat-editor').style.display = '';
+  const input = document.getElementById('new-tagcat-name');
+  input.value = '';
+  input.focus();
+}
+
+function cancelAddTagCategory() {
+  document.getElementById('add-tagcat-btn').style.display = '';
+  document.getElementById('add-tagcat-editor').style.display = 'none';
+}
+
+function onNewTagCategoryKeydown(e) {
+  if (e.key === 'Enter') { e.preventDefault(); confirmAddTagCategory(); }
+  if (e.key === 'Escape') { e.preventDefault(); cancelAddTagCategory(); }
+}
+
+function confirmAddTagCategory() {
+  const name = document.getElementById('new-tagcat-name').value.trim();
+  cancelAddTagCategory();
+  if (!name) return;
+
+  tagCategories.push({ id: `tagcat-${Date.now()}`, name });
+  markTagsDirty();
+  renderTags();
+}
+
+// Dragging a tag chip onto a category line calls this (see onTagLineDrop) —
+// recategorizing a tag is global, not per-review, so it just updates the
+// registry entry directly.
+function reassignRegistryTag(id, category) {
+  const tag = tagRegistry.find(t => t.id === id);
+  if (!tag) return;
+  tag.category = category;
+  markTagsDirty();
+  renderTags();
+  updatePreview();
 }
 
 // ── Preview ───────────────────────────────────────────────────────────────────
@@ -1869,6 +2324,7 @@ function renderSitePreview(r) {
     activeSubIndex: sitePreviewSubTab,
     permalinkHref: r.id ? siteReviewUrl(r.id) : null,
     disablePermalinkNav: true,
+    tagRegistry,
   });
   document.querySelector('#site-preview .card-main').onclick = () => {
     sitePreviewExpanded = !sitePreviewExpanded;
@@ -2206,6 +2662,7 @@ function b64decode(b64) {
 
   set('f-date', today());
   renderCustomBlocks();
+  renderTags();
   renderReviewTabs();
   updatePreview();
   renderList();

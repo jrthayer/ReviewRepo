@@ -90,6 +90,44 @@ function renderBBCode(raw) {
   return html;
 }
 
+// Groups a review's flat tag-name array by category, looked up (case-insensitively)
+// in the global tag registry (data/tags.json, [{ id, name, category }]). Categories
+// appear in order of first appearance among tagNames; unregistered/uncategorized
+// names collect into a single trailing group with category ''. Each entry keeps its
+// original index into tagNames so callers (admin's chip removal) can address it.
+function groupTagNames(tagNames, tagRegistry = []) {
+  const categoryOf = new Map(tagRegistry.map(t => [t.name.toLowerCase(), t.category || '']));
+  const groups = [];
+  const groupByCategory = new Map();
+  const uncategorized = { category: '', entries: [] };
+
+  tagNames.forEach((name, index) => {
+    const category = categoryOf.get(name.toLowerCase()) || '';
+    if (!category) { uncategorized.entries.push({ name, index }); return; }
+    if (!groupByCategory.has(category)) {
+      const group = { category, entries: [] };
+      groupByCategory.set(category, group);
+      groups.push(group);
+    }
+    groupByCategory.get(category).entries.push({ name, index });
+  });
+
+  if (uncategorized.entries.length) groups.push(uncategorized);
+  return groups;
+}
+
+// Renders a review's tags as .tag-badge pills, clustered into labeled .tag-group
+// blocks per the tag registry (see groupTagNames above); uncategorized tags render
+// as bare badges with no group label, matching the pre-categorization look.
+function renderTagList(tagNames, tagRegistry = []) {
+  if (!tagNames?.length) return '';
+  const groups = groupTagNames(tagNames, tagRegistry);
+  const badge = e => `<span class="tag-badge">${escHtml(e.name)}</span>`;
+  return `<div class="tag-list">${groups.map(g => `<div class="tag-group">${
+    g.category ? `<span class="tag-group-label">${escHtml(g.category)}</span>` : ''
+  }${g.entries.map(badge).join('')}</div>`).join('')}</div>`;
+}
+
 // Renders one review card's full markup (collapsed or expanded), used both for
 // the live site's card list and the admin tool's "Site Card Preview". Each
 // caller wires up its own click/expand behavior on top of this HTML, since
@@ -102,6 +140,7 @@ function renderCard(r, opts = {}) {
     activeSubIndex = 0,
     permalinkHref = null,
     disablePermalinkNav = false,
+    tagRegistry = [],
   } = opts;
 
   const appId = steamAppId(r.coverImage);
@@ -124,7 +163,7 @@ function renderCard(r, opts = {}) {
           <span class="badge ${r.recommended ? 'yes' : 'no'}">${r.recommended ? 'Recommended' : 'Not Recommended'}</span>
           <p class="summary">${escHtml(r.summary)}</p>
           <div class="meta">${r.hoursPlayed} hrs &middot; ${r.datePosted ? formatDate(r.datePosted) : '—'}</div>
-          ${r.tags?.length ? `<div class="tag-list">${r.tags.map(t => `<span class="tag-badge">${escHtml(t)}</span>`).join('')}</div>` : ''}
+          ${renderTagList(r.tags, tagRegistry)}
         </div>
         <div class="card-chevron">${expanded ? '▲' : '▼'}</div>
       </div>

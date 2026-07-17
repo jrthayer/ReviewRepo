@@ -87,8 +87,9 @@ header {
 
 .tag-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
   margin-top: 0.45rem;
 }
 
@@ -99,6 +100,31 @@ header {
   padding: 0.12rem 0.5rem;
   border-radius: 999px;
 }
+
+.tag-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.tag-group-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  opacity: 0.75;
+}
+
+/* The tag filter bar keeps its groups side-by-side on one row (divided by a
+   rule) rather than stacked, since it's a compact toolbar, not a tag list. */
+#tag-filters .tag-group {
+  padding-right: 0.5rem;
+  border-right: 1px solid var(--border);
+}
+
+#tag-filters .tag-group:last-child { border-right: none; padding-right: 0; }
 
 /* ── Cards ── */
 
