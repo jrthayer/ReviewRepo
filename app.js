@@ -84,7 +84,6 @@ function render() {
     activeTabId: expandedBodyTab,
     activeSubIndex: expandedSubTab,
     permalinkHref: `?review=${r.id}`,
-    tagRegistry,
   })).join('');
 
   app.querySelectorAll('.card').forEach(card => {

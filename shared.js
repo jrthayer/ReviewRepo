@@ -116,16 +116,17 @@ function groupTagNames(tagNames, tagRegistry = []) {
   return groups;
 }
 
-// Renders a review's tags as .tag-badge pills, clustered into labeled .tag-group
-// blocks per the tag registry (see groupTagNames above); uncategorized tags render
-// as bare badges with no group label, matching the pre-categorization look.
-function renderTagList(tagNames, tagRegistry = []) {
-  if (!tagNames?.length) return '';
-  const groups = groupTagNames(tagNames, tagRegistry);
-  const badge = e => `<span class="tag-badge">${escHtml(e.name)}</span>`;
-  return `<div class="tag-list">${groups.map(g => `<div class="tag-group">${
-    g.category ? `<span class="tag-group-label">${escHtml(g.category)}</span>` : ''
-  }${g.entries.map(badge).join('')}</div>`).join('')}</div>`;
+// Renders a review's curated "core" tags (r.coreTags — a per-review subset
+// of r.tags picked locally, not a global tag category, see the Tag
+// categories section of CLAUDE.md) as a flat row of .tag-badge pills, in the
+// order stored on the review. This is what actually shows on the card; the
+// full registry-grouped tag list (groupTagNames above) still drives the
+// admin tag chip editor and the site's tag filter bar, just not the card.
+function renderCoreTags(coreTagNames) {
+  if (!coreTagNames?.length) return '';
+  return `<div class="tag-list"><div class="tag-group">${
+    coreTagNames.map(name => `<span class="tag-badge">${escHtml(name)}</span>`).join('')
+  }</div></div>`;
 }
 
 // Renders one review card's full markup (collapsed or expanded), used both for
@@ -140,7 +141,6 @@ function renderCard(r, opts = {}) {
     activeSubIndex = 0,
     permalinkHref = null,
     disablePermalinkNav = false,
-    tagRegistry = [],
   } = opts;
 
   const appId = steamAppId(r.coverImage);
@@ -163,7 +163,7 @@ function renderCard(r, opts = {}) {
           <span class="badge ${r.recommended ? 'yes' : 'no'}">${r.recommended ? 'Recommended' : 'Not Recommended'}</span>
           <p class="summary">${escHtml(r.summary)}</p>
           <div class="meta">${r.hoursPlayed} hrs &middot; ${r.datePosted ? formatDate(r.datePosted) : '—'}</div>
-          ${renderTagList(r.tags, tagRegistry)}
+          ${renderCoreTags(r.coreTags)}
         </div>
         <div class="card-chevron">${expanded ? '▲' : '▼'}</div>
       </div>

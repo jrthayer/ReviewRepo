@@ -314,6 +314,8 @@
       transition: background 0.12s;
     }
     .tag-chip-group.drag-over { background: var(--border); outline: 1px dashed var(--accent); }
+    .tag-chip-group-core { border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; margin-bottom: 0.15rem; }
+    .tag-group-label-core { color: var(--accent); opacity: 1; }
     .tag-group-label {
       font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
       letter-spacing: 0.04em; color: var(--muted); opacity: 0.8;
@@ -757,6 +759,7 @@ let fileSha          = null;
 let editingId        = null;
 let steamLibrary     = [];
 let currentTags      = [];
+let currentCoreTags  = []; // review-local subset of currentTags shown as badges on the card (renderCoreTags, shared.js) — NOT a global tag category, independent of tagCategories/tagRegistry; edited via the "Core Tags" drop line in renderTags() below
 let tagHlIndex       = -1;
 let savedFormState = null; // getForm() snapshot as of the last load/save — refreshFormSnapshot() sets it, getChangedFormFields() diffs the live form against it field by field
 let steamBody        = '';
@@ -1230,6 +1233,7 @@ function getForm() {
     body:        syncActiveTabContent().steamBody,
     tabs:        extraTabs.map(({ id, name, content }) => ({ id, name, content })),
     tags:        [...currentTags],
+    coreTags:    [...currentCoreTags],
   };
 }
 
@@ -1245,6 +1249,7 @@ function setForm(r) {
   const radio = document.querySelector(`input[name="recommended"][value="${r.recommended}"]`);
   if (radio) radio.checked = true;
   currentTags = [...(r.tags || [])];
+  currentCoreTags = [...(r.coreTags || [])];
   renderTags();
   activeReviewTab = 'steam';
   activeSubTabs = parseSubTabsForEditing(steamBody);
@@ -1262,6 +1267,7 @@ function clearForm() {
   steamBody = '';
   extraTabs = [];
   currentTags = [];
+  currentCoreTags = [];
   renderTags();
   activeReviewTab = 'steam';
   activeSubTabs = [];
@@ -2035,12 +2041,26 @@ function renderTags() {
   // own rename editor from the very first render.
   const lines = [...tagCategories, { id: '', name: '' }];
 
-  const chip = (name, index) => `
+  const chip = (name, index, onRemove) => `
     <span class="tag-chip" draggable="true" ondragstart="onTagChipDragStart(event, ${index})" ondragend="onTagChipDragEnd()">
-      ${escHtml(name)}<button type="button" onclick="removeTagAt(${index})">×</button>
+      ${escHtml(name)}<button type="button" onclick="${onRemove ?? `removeTagAt(${index})`}">×</button>
     </span>`;
 
-  box.innerHTML = lines.map(cat => {
+  // Core Tags is a review-local drop line, not a real tagCategories entry —
+  // it doesn't recategorize a tag (see onCoreTagsLineDrop), just flags it to
+  // also render on the card via r.coreTags (see renderCoreTags, shared.js).
+  // Rendered in currentCoreTags order (meaningful once tag ordering lands),
+  // not currentTags order.
+  const coreEntries = currentCoreTags
+    .map(name => ({ name, index: currentTags.findIndex(t => t.toLowerCase() === name.toLowerCase()) }))
+    .filter(e => e.index !== -1);
+  const coreLine = `
+    <div class="tag-chip-group tag-chip-group-core" ondragover="onTagLineDragOver(event)" ondragleave="onTagLineDragLeave(event)" ondrop="onCoreTagsLineDrop(event)">
+      <span class="tag-group-label tag-group-label-core">Core Tags</span>
+      ${coreEntries.map(e => chip(e.name, e.index, `removeCoreTag('${escHtml(e.name).replace(/'/g, "\\'")}')`)).join('')}
+    </div>`;
+
+  box.innerHTML = coreLine + lines.map(cat => {
     const entries = currentTags
       .map((name, index) => ({ name, index }))
       .filter(e => categoryOf(e.name) === cat.name);
@@ -2180,6 +2200,35 @@ function onTagLineDrop(e, category) {
   reassignRegistryTag(entry.id, category);
 }
 
+// Dropping a chip onto the Core Tags line just flags it locally (adds its
+// name to currentCoreTags, order-preserving, no dupes) — unlike
+// onTagLineDrop above, this never touches tagRegistry/tagCategories: a tag
+// keeps whatever category it already has and simply also becomes core for
+// this review. Rides the normal getForm()/FORM_FIELD_LABELS dirty-tracking
+// path, not tagsDirty/ghCommitFiles, since coreTags lives on the review
+// itself, not the global registry.
+function onCoreTagsLineDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const index = draggedTagIndex;
+  draggedTagIndex = null;
+  if (index === null || index === undefined) return;
+
+  const name = currentTags[index];
+  if (!name || currentCoreTags.some(n => n.toLowerCase() === name.toLowerCase())) return;
+  currentCoreTags.push(name);
+  renderTags();
+  updatePreview();
+}
+
+// Removes a tag from Core Tags only — the tag itself stays on the review
+// (and in its category), same as unstarring rather than deleting it.
+function removeCoreTag(name) {
+  currentCoreTags = currentCoreTags.filter(n => n.toLowerCase() !== name.toLowerCase());
+  renderTags();
+  updatePreview();
+}
+
 // Registers a not-yet-known name in the global registry with the given
 // category (used both for brand-new tags typed into the input, uncategorized,
 // and for legacy/unregistered tags that get a category by being dragged onto
@@ -2213,7 +2262,8 @@ function addTag(raw) {
 }
 
 function removeTagAt(i) {
-  currentTags.splice(i, 1);
+  const [name] = currentTags.splice(i, 1);
+  currentCoreTags = currentCoreTags.filter(n => n.toLowerCase() !== name.toLowerCase());
   renderTags();
   updatePreview();
 }
@@ -2328,6 +2378,7 @@ const FORM_FIELD_LABELS = {
   hoursPlayed: 'Hours Played',
   datePosted:  'Date Posted',
   tags:        'Tags',
+  coreTags:    'Core Tags',
 };
 
 // Diffs one tab's raw content string against its saved version. If either
@@ -2490,7 +2541,6 @@ function renderSitePreview(r) {
     activeSubIndex: sitePreviewSubTab,
     permalinkHref: r.id ? siteReviewUrl(r.id) : null,
     disablePermalinkNav: true,
-    tagRegistry,
   });
   document.querySelector('#site-preview .card-main').onclick = () => {
     sitePreviewExpanded = !sitePreviewExpanded;
