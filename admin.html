@@ -455,6 +455,20 @@
       border-bottom: 1px solid #1b2838;
     }
     .steam-body { padding: 13px 15px; line-height: 1.65; }
+    .steam-copy-row {
+      padding: 10px 15px;
+      background: #1e3a52;
+      border-top: 1px solid #1b2838;
+      text-align: right;
+    }
+    .steam-copy-btn {
+      background: #2a475e; color: #c6d4df;
+      border: 1px solid #3d5068; border-radius: 3px;
+      padding: 6px 14px;
+      font-family: Arial, sans-serif; font-size: 0.78rem;
+      cursor: pointer;
+    }
+    .steam-copy-btn:hover { background: #3d5068; }
     .steam-body p { margin-bottom: 0.55rem; }
     .steam-body ul, .steam-body ol { margin: 0 0 0.55rem 1.1rem; }
     .steam-body ul li, .steam-body ol li { margin-bottom: 0.15rem; }
@@ -754,10 +768,7 @@
     <h2 class="panel-title">Site Card Preview</h2>
     <div id="site-preview"></div>
 
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.9rem">
-      <h2 class="panel-title" style="margin-bottom:0">Steam Preview</h2>
-      <button type="button" class="sm secondary" id="copy-steam-btn" onclick="copyForSteam()">Copy for Steam</button>
-    </div>
+    <h2 class="panel-title">Steam Preview</h2>
     <div id="steam-preview"></div>
   </div>
 
@@ -790,6 +801,7 @@ let confirmingSubTabDeleteId = null; // sub-tab id currently showing its inline 
 let sitePreviewExpanded = true;
 let sitePreviewBodyTab  = 'steam';
 let sitePreviewSubTab   = 0;
+let sitePreviewShowAllTags = false;
 let customBlocks        = []; // [{ id, name, content }] — reusable saved snippets, shared across all reviews
 let blocksSha           = null;
 let pendingBlockContent = null; // selected text staged while naming a new block
@@ -2888,9 +2900,19 @@ function renderSitePreview(r) {
     activeSubIndex: sitePreviewSubTab,
     permalinkHref: r.id ? siteReviewUrl(r.id) : null,
     disablePermalinkNav: true,
+    tagRegistry,
+    showAllTags: expanded && sitePreviewShowAllTags,
   });
   document.querySelector('#site-preview .card-main').onclick = () => {
+    // Same as the live site (app.js): closing the tag list takes one click,
+    // collapsing the card takes a second.
+    if (sitePreviewExpanded && sitePreviewShowAllTags) {
+      sitePreviewShowAllTags = false;
+      renderSitePreview(getForm());
+      return;
+    }
     sitePreviewExpanded = !sitePreviewExpanded;
+    sitePreviewShowAllTags = false;
     renderSitePreview(getForm());
   };
   // Clicking a tab/sub-tab pill in the preview drives the same editor functions the
@@ -2907,6 +2929,21 @@ function renderSitePreview(r) {
       e.stopPropagation();
       const sub = activeSubTabs[Number(btn.dataset.subTab)];
       if (sub) switchSubTab(sub.id);
+    };
+  });
+  // Same "+"/"−" toggle as the live site (see app.js) — expands the preview
+  // card if it's collapsed and reveals the full tag list, or just toggles
+  // it on an already-expanded preview.
+  document.querySelectorAll('#site-preview [data-toggle-tags]').forEach(btn => {
+    btn.onclick = e => {
+      e.stopPropagation();
+      if (!sitePreviewExpanded) {
+        sitePreviewExpanded = true;
+        sitePreviewShowAllTags = true;
+      } else {
+        sitePreviewShowAllTags = !sitePreviewShowAllTags;
+      }
+      renderSitePreview(getForm());
     };
   });
 }
@@ -2940,16 +2977,20 @@ function renderSteamPreview(r) {
           ${r.id ? `<br><p><a href="${escHtml(siteReviewUrl(r.id))}" target="_blank" rel="noopener noreferrer">${SITE_LINK_TEXT}</a></p>` : ''}
         ` : '<p class="steam-empty">Fill in the form to see the preview.</p>'}
       </div>
+      <div class="steam-copy-row">
+        <button type="button" class="steam-copy-btn" id="copy-steam-btn" onclick="copyForSteam()">Copy for Steam</button>
+      </div>
     </div>
   `;
 }
 
+// Steam already shows the game name, recommendation, and hours played as its
+// own page chrome around the review text box (see renderSteamPreview's
+// steam-rec/steam-meta, rendered outside .steam-body) — the copied text is
+// only what goes inside that box, so it shouldn't repeat any of the three.
 function copyForSteam() {
   const r = getForm();
   const lines = [];
-  lines.push(`[h1]${r.title}[/h1]`);
-  lines.push(`${r.recommended ? '✔ Recommended' : '✘ Not Recommended'} | ${r.hoursPlayed} hours played`);
-  lines.push('');
   if (r.summary) { lines.push(`[h1]${r.summary}[/h1]`); lines.push(''); }
   if (r.body)    { lines.push(r.body); lines.push(''); }
   if (r.id)      { lines.push(`<br>[url=${siteReviewUrl(r.id)}]${SITE_LINK_TEXT}[/url]`); }

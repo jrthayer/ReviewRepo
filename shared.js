@@ -120,13 +120,34 @@ function groupTagNames(tagNames, tagRegistry = []) {
 // of r.tags picked locally, not a global tag category, see the Tag
 // categories section of CLAUDE.md) as a flat row of .tag-badge pills, in the
 // order stored on the review. This is what actually shows on the card; the
-// full registry-grouped tag list (groupTagNames above) still drives the
-// admin tag chip editor and the site's tag filter bar, just not the card.
-function renderCoreTags(coreTagNames) {
+// full registry-grouped tag list (groupTagNames above, via renderFullTagList)
+// only appears if `canExpand` toggles it open (see the [data-toggle-tags]
+// button below and renderCard's use of it) — callers wire that button's
+// click to their own expand/toggle state, same as .review-tab/.sub-tab.
+function renderCoreTags(coreTagNames, { canExpand = false, expanded = false } = {}) {
   if (!coreTagNames?.length) return '';
   return `<div class="tag-list"><div class="tag-group">${
     coreTagNames.map(name => `<span class="tag-badge">${escHtml(name)}</span>`).join('')
-  }</div></div>`;
+  }${canExpand ? `<button type="button" class="tag-badge tag-more-btn" data-toggle-tags title="${expanded ? 'Hide' : 'Show'} all tags">${expanded ? '−' : '+'}</button>` : ''}</div></div>`;
+}
+
+// Renders a review's *entire* tag list, grouped into labeled .tag-group
+// blocks per the tag registry (see groupTagNames above); uncategorized tags
+// render with an empty label rather than no label at all — .tag-list-full
+// lays every group's label + badges out as a two-column grid (see
+// style.css), so every group needs the same two elements in the same order
+// for its badges to land in the badges column, whether or not it has a
+// category name to show. Shown at the top of the expanded card's tab
+// content when the [data-toggle-tags] button (see renderCoreTags above) is
+// toggled on.
+function renderFullTagList(tagNames, tagRegistry = []) {
+  if (!tagNames?.length) return '';
+  const groups = groupTagNames(tagNames, tagRegistry);
+  const badge = e => `<span class="tag-badge">${escHtml(e.name)}</span>`;
+  return `<div class="tag-list tag-list-full">${groups.map(g => `<div class="tag-group">
+    <span class="tag-group-label">${g.category ? escHtml(g.category) : ''}</span>
+    <div class="tag-group-badges">${g.entries.map(badge).join('')}</div>
+  </div>`).join('')}</div>`;
 }
 
 // Renders one review card's full markup (collapsed or expanded), used both for
@@ -141,6 +162,8 @@ function renderCard(r, opts = {}) {
     activeSubIndex = 0,
     permalinkHref = null,
     disablePermalinkNav = false,
+    tagRegistry = [],
+    showAllTags = false,
   } = opts;
 
   const appId = steamAppId(r.coverImage);
@@ -163,13 +186,14 @@ function renderCard(r, opts = {}) {
           <span class="badge ${r.recommended ? 'yes' : 'no'}">${r.recommended ? 'Recommended' : 'Not Recommended'}</span>
           <p class="summary">${escHtml(r.summary)}</p>
           <div class="meta">${r.hoursPlayed} hrs &middot; ${r.datePosted ? formatDate(r.datePosted) : '—'}</div>
-          ${renderCoreTags(r.coreTags)}
+          ${renderCoreTags(r.coreTags, { canExpand: (r.tags?.length || 0) > (r.coreTags?.length || 0), expanded: showAllTags })}
         </div>
         <div class="card-chevron">${expanded ? '▲' : '▼'}</div>
       </div>
       ${expanded ? `
         <div class="card-expanded">
           <div class="expanded-body">
+            ${showAllTags ? renderFullTagList(r.tags, tagRegistry) : ''}
             ${subTabs ? `
               <div class="sub-tabs">
                 ${subTabs.map((st, i) => `<button type="button" class="sub-tab ${i === activeSubIndex ? 'active' : ''}" data-sub-tab="${i}">${escHtml(st.name)}</button>`).join('')}

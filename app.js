@@ -5,6 +5,7 @@ let expandedId = null;
 let activeTag = null;
 let expandedBodyTab = 'steam';
 let expandedSubTab = 0;
+let showAllTags = false;
 
 async function init() {
   reviews = JSON.parse(localStorage.getItem('gh_reviews_cache') || '[]');
@@ -84,14 +85,25 @@ function render() {
     activeTabId: expandedBodyTab,
     activeSubIndex: expandedSubTab,
     permalinkHref: `?review=${r.id}`,
+    tagRegistry,
+    showAllTags: expandedId === r.id && showAllTags,
   })).join('');
 
   app.querySelectorAll('.card').forEach(card => {
     card.addEventListener('click', () => {
       const id = card.dataset.id;
+      // Clicking an already-expanded card with its tag list open just closes
+      // that list first — a second click is needed to collapse the card
+      // itself, same as clicking a tab doesn't collapse the card either.
+      if (expandedId === id && showAllTags) {
+        showAllTags = false;
+        render();
+        return;
+      }
       expandedId = expandedId === id ? null : id;
       expandedBodyTab = 'steam';
       expandedSubTab = 0;
+      showAllTags = false;
       render();
     });
   });
@@ -112,6 +124,26 @@ function render() {
       const idx = Number(btn.dataset.subTab);
       if (idx === expandedSubTab) return;
       expandedSubTab = idx;
+      render();
+    });
+  });
+
+  // The "+"/"−" button at the end of the Core Tags row (see renderCoreTags,
+  // shared.js) expands the card (if collapsed) and reveals the full
+  // category-grouped tag list at the top of the tab content; clicking it
+  // again on an already-expanded card just toggles that list off.
+  app.querySelectorAll('[data-toggle-tags]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.closest('.card').dataset.id;
+      if (expandedId !== id) {
+        expandedId = id;
+        expandedBodyTab = 'steam';
+        expandedSubTab = 0;
+        showAllTags = true;
+      } else {
+        showAllTags = !showAllTags;
+      }
       render();
     });
   });
