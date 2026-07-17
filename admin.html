@@ -166,7 +166,7 @@
     .r-item.active button { background: var(--accent); color: #fff; }
 
     /* ── Form ── */
-    #review-form { display: flex; flex-direction: column; gap: 0.75rem; }
+    #review-form { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 2rem; }
     #form-heading { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.1rem; }
 
     .dyn-section > label { margin-bottom: 0.25rem; }
@@ -290,7 +290,7 @@
     #save-row { display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap; padding-top: 0.25rem; }
     .status { font-size: 0.78rem; }
     .status.ok { color: var(--green); }
-    .dirty-indicator { font-size: 0.78rem; font-weight: 600; color: var(--amber); }
+    .dirty-indicator-text { font-size: 0.78rem; font-weight: 600; color: var(--amber); }
 
     #bbcode-warnings { font-size: 0.78rem; color: var(--amber); min-height: 1.1em; margin-top: 0.3rem; }
 
@@ -716,7 +716,7 @@
         <button type="button" class="secondary" id="export-btn" onclick="exportReview()" title="Copy the whole review as plain text, e.g. to paste into a word processor for spelling/grammar checks">Export</button>
         <button type="button" class="secondary" id="import-btn" onclick="startImportReview()" title="Paste back an edited export to update this review">Import</button>
         <span id="save-status" class="status"></span>
-        <span id="tags-dirty-indicator" class="dirty-indicator" style="display:none" title="Tag/category changes are saved together with the review, not pushed individually">&#9679; Unsaved tag changes</span>
+        <span id="dirty-indicator" class="dirty-indicator-text" style="display:none"></span>
       </div>
 
       <div id="import-panel" style="display:none">
@@ -758,6 +758,7 @@ let editingId        = null;
 let steamLibrary     = [];
 let currentTags      = [];
 let tagHlIndex       = -1;
+let savedFormState = null; // getForm() snapshot as of the last load/save — refreshFormSnapshot() sets it, getChangedFormFields() diffs the live form against it field by field
 let steamBody        = '';
 let extraTabs        = []; // [{ id, name, content }]
 let activeReviewTab  = 'steam';
@@ -782,6 +783,8 @@ let pendingTabContent   = null; // content of the active tab staged while naming
 let confirmingTabDeleteId = null; // saved-tab id currently showing its inline "delete?" confirmation
 let tagCategories        = []; // [{ id, name }] — saved tag categories, stored in data/tag-categories.json
 let tagRegistry          = []; // [{ id, name, category }] — global tag name → category registry, stored in data/tags.json (category is a tagCategories name, or '' for uncategorized)
+let savedTagCategories        = []; // last GitHub-synced snapshot of tagCategories — discardTagChanges() reverts to this
+let savedTagRegistry          = []; // last GitHub-synced snapshot of tagRegistry — discardTagChanges() reverts to this
 let draggedTagIndex          = null; // index into currentTags of the chip currently being dragged between category lines
 let renamingTagCategoryId    = null; // category id currently showing its inline rename editor (input + confirm/cancel) in the tag chip editor
 let confirmingTagCatDeleteId = null; // category id currently showing its inline "delete?" confirmation in the tag chip editor
@@ -1110,8 +1113,10 @@ function renderList() {
 function loadReview(id) {
   const r = reviews.find(r => r.id === id);
   if (!r) return;
+  discardTagChanges();
   editingId = id;
   setForm(r);
+  refreshFormSnapshot();
   document.getElementById('form-heading').textContent = 'Edit Review';
   document.getElementById('delete-btn').style.display = 'inline-block';
   document.getElementById('delete-confirm').style.display = 'none';
@@ -1120,8 +1125,10 @@ function loadReview(id) {
 }
 
 function newReview() {
+  discardTagChanges();
   editingId = null;
   clearForm();
+  refreshFormSnapshot();
   document.getElementById('form-heading').textContent = 'New Review';
   document.getElementById('delete-btn').style.display = 'none';
   document.getElementById('delete-confirm').style.display = 'none';
@@ -1156,6 +1163,8 @@ async function saveReview() {
         `${idx >= 0 ? 'Update' : 'Add'} review: ${data.id} (+ tag changes)`
       );
       fileSha = blobShas[0];
+      savedTagCategories = tagCategories.map(c => ({ ...c }));
+      savedTagRegistry = tagRegistry.map(t => ({ ...t }));
       cacheTagCategories(tagCategories);
       cacheTagRegistry(tagRegistry);
       clearTagsDirty();
@@ -1167,6 +1176,8 @@ async function saveReview() {
     reviews = latest;
     cacheReviews(reviews);
     editingId = data.id;
+    refreshFormSnapshot();
+    updateDirtyIndicator();
     document.getElementById('form-heading').textContent = 'Edit Review';
     document.getElementById('delete-btn').style.display = 'inline-block';
     renderList();
@@ -1864,6 +1875,7 @@ async function loadTagCategoriesList() {
   try {
     const { categories } = await fetchTagCategoriesFile();
     tagCategories = categories;
+    savedTagCategories = categories.map(c => ({ ...c }));
     cacheTagCategories(tagCategories);
     renderTags();
   } catch (e) {
@@ -1875,12 +1887,26 @@ async function loadTagRegistryList() {
   try {
     const { tags } = await fetchTagsRegistryFile();
     tagRegistry = tags;
+    savedTagRegistry = tags.map(t => ({ ...t }));
     cacheTagRegistry(tagRegistry);
     renderTags();
     updatePreview();
   } catch (e) {
     setSt('save-status', e.message, true);
   }
+}
+
+// Tag/category edits are a local draft like every other form field — lost if
+// you switch to a different review (or start a new one) without saving,
+// rather than silently riding along into whatever review gets saved next.
+// Reverts to the last GitHub-synced snapshot (see savedTagCategories/
+// savedTagRegistry, refreshed on load and after a successful save).
+function discardTagChanges() {
+  if (!tagsDirty) return;
+  tagCategories = savedTagCategories.map(c => ({ ...c }));
+  tagRegistry = savedTagRegistry.map(t => ({ ...t }));
+  clearTagsDirty();
+  renderTags();
 }
 
 function renderTabAddDropdown() {
@@ -2275,18 +2301,106 @@ function onTagKeydown(e) {
 
 // Tag/category edits (add/delete/recategorize) only touch tagRegistry/tagCategories
 // in memory — no GitHub call per action. markTagsDirty() flags that there's a
-// pending change, shown next to the Save button; saveReview() commits both
-// files together with the review itself (via ghCommitFiles), then clears the flag.
+// pending change; saveReview() commits both files together with the review
+// itself (via ghCommitFiles), then clears the flag. The visible "Unsaved
+// changes" indicator (see updateDirtyIndicator) covers this and every other
+// form field the same way — see isFormDirty/refreshFormSnapshot below.
 function markTagsDirty() {
   tagsDirty = true;
-  const el = document.getElementById('tags-dirty-indicator');
-  if (el) el.style.display = '';
+  updateDirtyIndicator();
 }
 
 function clearTagsDirty() {
   tagsDirty = false;
-  const el = document.getElementById('tags-dirty-indicator');
-  if (el) el.style.display = 'none';
+  updateDirtyIndicator();
+}
+
+// Human labels for getForm()'s flat fields, used to report *which* fields
+// are unsaved (see getChangedFormFields) — id is deliberately excluded, it's
+// just auto-synced from title, not a meaningful field to report on its own.
+// body/tabs are handled separately (diffTabContent) so changes can be
+// reported per tab/sub-tab instead of one generic "Tabs" line.
+const FORM_FIELD_LABELS = {
+  title:       'Title',
+  recommended: 'Recommendation',
+  summary:     'Summary',
+  coverImage:  'Cover Image',
+  hoursPlayed: 'Hours Played',
+  datePosted:  'Date Posted',
+  tags:        'Tags',
+};
+
+// Diffs one tab's raw content string against its saved version. If either
+// side has [tab=Name] sub-tabs (splitSubTabs, shared.js), reports the
+// specific sub-tab name(s) that differ instead of the whole tab — falling
+// back to `label` alone if content differs but no single sub-tab accounts
+// for it (e.g. a pure sub-tab reorder with unchanged individual contents).
+function diffTabContent(label, oldContent, newContent) {
+  if ((oldContent || '') === (newContent || '')) return [];
+  const oldSubs = splitSubTabs(oldContent || '');
+  const newSubs = splitSubTabs(newContent || '');
+  if (!oldSubs && !newSubs) return [label];
+
+  const oldMap = new Map(oldSubs ? oldSubs.map(s => [s.name, s.content]) : []);
+  const newMap = new Map(newSubs ? newSubs.map(s => [s.name, s.content]) : []);
+  const changed = [...new Set([...oldMap.keys(), ...newMap.keys()])]
+    .filter(name => oldMap.get(name) !== newMap.get(name))
+    .map(name => `${label} — ${name}`);
+  return changed.length ? changed : [label];
+}
+
+// Which parts of the form differ from the last loaded/saved review — same
+// "local draft" idea as tagsDirty (see discardTagChanges), just for every
+// other field instead of tags/categories. `form` lets callers that already
+// have a fresh getForm() result (updatePreview) skip recomputing it.
+function getChangedFormFields(form) {
+  if (!savedFormState) return [];
+  form = form ?? getForm();
+
+  const changed = Object.keys(FORM_FIELD_LABELS)
+    .filter(key => JSON.stringify(form[key]) !== JSON.stringify(savedFormState[key]))
+    .map(key => FORM_FIELD_LABELS[key]);
+
+  changed.push(...diffTabContent('Steam Review', savedFormState.body, form.body));
+
+  const oldTabs = new Map(savedFormState.tabs.map(t => [t.id, t]));
+  const newTabs = new Map(form.tabs.map(t => [t.id, t]));
+  for (const id of new Set([...oldTabs.keys(), ...newTabs.keys()])) {
+    const oldTab = oldTabs.get(id);
+    const newTab = newTabs.get(id);
+    if (!oldTab) { changed.push(`Tab: ${newTab.name} (new)`); continue; }
+    if (!newTab) { changed.push(`Tab: ${oldTab.name} (removed)`); continue; }
+    if (oldTab.name !== newTab.name) changed.push(`Tab renamed: ${oldTab.name} → ${newTab.name}`);
+    changed.push(...diffTabContent(`Tab: ${newTab.name}`, oldTab.content, newTab.content));
+  }
+
+  const oldTabOrder = savedFormState.tabs.map(t => t.id);
+  const newTabOrder = form.tabs.map(t => t.id);
+  if (JSON.stringify(oldTabOrder) !== JSON.stringify(newTabOrder) &&
+      oldTabOrder.slice().sort().join() === newTabOrder.slice().sort().join()) {
+    changed.push('Tab order');
+  }
+
+  return changed;
+}
+
+function isFormDirty(form) {
+  return getChangedFormFields(form).length > 0;
+}
+
+function refreshFormSnapshot() {
+  savedFormState = getForm();
+}
+
+function updateDirtyIndicator(form) {
+  const el = document.getElementById('dirty-indicator');
+  if (!el) return;
+  const changed = getChangedFormFields(form);
+  if (tagsDirty) changed.push('Tag categories');
+  el.style.display = changed.length ? '' : 'none';
+  if (changed.length) {
+    el.textContent = `● ${changed.length} unsaved change${changed.length === 1 ? '' : 's'}: ${changed.join(', ')}`;
+  }
 }
 
 // ── Tag categories ──────────────────────────────────────────────────────────
@@ -2330,6 +2444,7 @@ function updatePreview() {
   renderSitePreview(r);
   renderSteamPreview(r);
   renderBBCodeWarnings();
+  updateDirtyIndicator(r);
 }
 
 // ── BBCode tag validation ─────────────────────────────────────────────────────
