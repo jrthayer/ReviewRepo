@@ -1,6 +1,6 @@
 # Categorized tags (global tag registry)
 
-> Implemented in commit: _pending — filled in after this change is committed._
+> Implemented in commit: [`883cb54`](https://github.com/jrthayer/ReviewRepo/commit/883cb54) — note the design evolved somewhat during implementation (see the conversation this plan came from): tags are recategorized by dragging onto a category line rather than via a picker at creation time, there's no delete-tag UI, tag/category edits are buffered locally and flushed together with the next review save via a Git Data API multi-file commit (rather than pushed individually), and automated commits use a fixed non-personal identity so they don't count on the token owner's contribution graph.
 
 ## Context
 
