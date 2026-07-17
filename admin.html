@@ -625,6 +625,10 @@
         <div class="tags-label-row">
           <label>Tags</label>
           <span class="tags-actions">
+            <div class="dropdown-wrap manage-tags-wrap">
+              <button type="button" class="sm secondary" onclick="toggleManageTagsDropdown(event)" title="Delete tags from the global registry">Manage Tags &#9662;</button>
+              <div id="manage-tags-dropdown" class="dropdown-menu"></div>
+            </div>
             <button type="button" class="sm secondary" id="add-tag-btn" onclick="startAddTag(event)" title="Add a tag to this review">+ Add Tag</button>
             <span id="tag-input-wrap" style="display:none">
               <input id="tag-input" type="text" class="save-block-input" placeholder="Type to add or create a tag..."
@@ -792,6 +796,7 @@ let savedTagRegistry          = []; // last GitHub-synced snapshot of tagRegistr
 let draggedTagIndex          = null; // index into currentTags of the chip currently being dragged between category lines
 let renamingTagCategoryId    = null; // category id currently showing its inline rename editor (input + confirm/cancel) in the tag chip editor
 let confirmingTagCatDeleteId = null; // category id currently showing its inline "delete?" confirmation in the tag chip editor
+let confirmingTagDeleteId    = null; // registry tag id currently showing its inline "delete?" confirmation in the Manage Tags dropdown
 let tagsDirty                = false; // true when tagRegistry/tagCategories have local edits not yet pushed to GitHub — committed together with the next review save (ghCommitFiles), not per-action
 
 // ── Constants & helpers ────────────────────────────────────────────────────────
@@ -1897,6 +1902,7 @@ async function loadTagRegistryList() {
     savedTagRegistry = tags.map(t => ({ ...t }));
     cacheTagRegistry(tagRegistry);
     renderTags();
+    renderManageTagsDropdown();
     updatePreview();
   } catch (e) {
     setSt('save-status', e.message, true);
@@ -1914,6 +1920,7 @@ function discardTagChanges() {
   tagRegistry = savedTagRegistry.map(t => ({ ...t }));
   clearTagsDirty();
   renderTags();
+  renderManageTagsDropdown();
 }
 
 function renderTabAddDropdown() {
@@ -2570,6 +2577,131 @@ function reassignRegistryTag(id, category) {
   updatePreview();
 }
 
+// "Manage Tags ▾" — the one place to browse and delete from the *global*
+// tag registry (data/tags.json), independent of whatever tags happen to be
+// on the review currently open (renderTags' chip editor only ever shows
+// those). Unlike every other tag/category edit, deleting a tag here does
+// NOT go through the local-draft/markTagsDirty()/next-save path (see
+// confirmDeleteRegistryTag) — it cascades into every review's tags/coreTags,
+// which nothing else in this feature touches, so it pushes to GitHub
+// immediately instead of waiting for whatever review happens to be open
+// next to be saved.
+function renderManageTagsDropdown() {
+  const el = document.getElementById('manage-tags-dropdown');
+  if (!tagRegistry.length) { el.innerHTML = '<div class="dropdown-empty">No tags yet.</div>'; return; }
+
+  const sorted = [...tagRegistry].sort((a, b) => a.name.localeCompare(b.name));
+  el.innerHTML = sorted.map(t => {
+    if (confirmingTagDeleteId === t.id) {
+      return `
+        <div class="dropdown-item dropdown-item-confirm">
+          ${deleteConfirmRow(t.name, `confirmDeleteRegistryTag('${t.id}')`, `cancelDeleteRegistryTag()`)}
+        </div>
+      `;
+    }
+    return `
+      <div class="dropdown-item">
+        <span>${escHtml(t.name)}${t.category ? ` <span class="tag-suggestion-cat">${escHtml(t.category)}</span>` : ''}</span>
+        <button type="button" class="dropdown-remove" onclick="startDeleteRegistryTag(event, '${t.id}')" title="Delete this tag">&times;</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleManageTagsDropdown(e) {
+  e.stopPropagation();
+  renderManageTagsDropdown();
+  document.getElementById('manage-tags-dropdown').classList.toggle('open');
+}
+
+function closeManageTagsDropdown() {
+  document.getElementById('manage-tags-dropdown').classList.remove('open');
+  confirmingTagDeleteId = null;
+}
+
+function startDeleteRegistryTag(e, id) {
+  e.stopPropagation();
+  confirmingTagDeleteId = id;
+  renderManageTagsDropdown();
+}
+
+function cancelDeleteRegistryTag() {
+  confirmingTagDeleteId = null;
+  renderManageTagsDropdown();
+}
+
+// Deletes tag `id` from the registry AND strips its name out of every
+// review's tags/coreTags — a real, immediate GitHub write (fetch the latest
+// reviews.json, edit every entry, commit alongside the trimmed registry),
+// not the deferred local-draft pattern the rest of this file's tag/category
+// edits use, because those never touch reviews other than whichever one is
+// currently open. Also flushes any other pending tagsDirty edits (category
+// renames, etc.) into the same commit, and — since the review being edited
+// right now might be one of the reviews that just lost this tag on GitHub —
+// strips it from currentTags/currentCoreTags too, so its next save doesn't
+// silently resurrect the tag from the in-memory form draft.
+async function confirmDeleteRegistryTag(id) {
+  confirmingTagDeleteId = null;
+  const tag = tagRegistry.find(t => t.id === id);
+  if (!tag) { renderManageTagsDropdown(); return; }
+
+  const { owner, repo, token } = getCfg();
+  if (!owner || !repo || !token) { setSt('save-status', 'Configure GitHub settings first.', true); return; }
+
+  const nextRegistry = tagRegistry.filter(t => t.id !== id);
+  const lname = tag.name.toLowerCase();
+
+  setSt('save-status', 'Deleting tag...', false);
+  try {
+    const { reviews: latest } = await fetchFile();
+    const updated = latest.map(r => ({
+      ...r,
+      tags: (r.tags || []).filter(t => t.toLowerCase() !== lname),
+      coreTags: (r.coreTags || []).filter(t => t.toLowerCase() !== lname),
+    }));
+
+    const { blobShas } = await ghCommitFiles(
+      [
+        { path: 'data/reviews.json', data: updated },
+        { path: 'data/tag-categories.json', data: tagCategories },
+        { path: 'data/tags.json', data: nextRegistry },
+      ],
+      `Delete tag: ${tag.name}`
+    );
+    fileSha = blobShas[0];
+
+    tagRegistry = nextRegistry;
+    reviews = updated;
+    cacheReviews(reviews);
+    savedTagCategories = tagCategories.map(c => ({ ...c }));
+    savedTagRegistry = tagRegistry.map(t => ({ ...t }));
+    cacheTagCategories(tagCategories);
+    cacheTagRegistry(tagRegistry);
+    clearTagsDirty();
+
+    currentTags = currentTags.filter(t => t.toLowerCase() !== lname);
+    currentCoreTags = currentCoreTags.filter(t => t.toLowerCase() !== lname);
+    // The open review's GitHub copy just lost this tag too (it went through
+    // `updated` above like every other review) — patch the dirty-check
+    // snapshot to match so the indicator doesn't misreport it as an unsaved
+    // tag edit. Only the tags/coreTags fields, so any *other* genuinely
+    // unsaved field (title, body, ...) still reports correctly.
+    if (savedFormState && editingId) {
+      savedFormState.tags = savedFormState.tags.filter(t => t.toLowerCase() !== lname);
+      savedFormState.coreTags = (savedFormState.coreTags || []).filter(t => t.toLowerCase() !== lname);
+    }
+
+    renderList();
+    renderTags();
+    renderManageTagsDropdown();
+    updatePreview();
+    setSt('save-status', 'Tag deleted.', false);
+  } catch (e) {
+    setSt('save-status', e.message, true);
+    renderManageTagsDropdown();
+  }
+}
+
 // ── Preview ───────────────────────────────────────────────────────────────────
 function updatePreview() {
   const r = getForm();
@@ -2982,6 +3114,9 @@ function b64decode(b64) {
     }
     if (!e.target.closest('.tab-add-wrap')) {
       closeTabAddDropdown();
+    }
+    if (!e.target.closest('.manage-tags-wrap')) {
+      closeManageTagsDropdown();
     }
   });
 })();
