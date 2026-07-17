@@ -2224,16 +2224,24 @@ function onTagChipDrop(e, index, scope) {
   e.currentTarget.classList.remove('drag-over-chip');
 
   const fromIndex = draggedTagIndex;
+  const toIndex = index;
   draggedTagIndex = null;
-  const fromName = currentTags[fromIndex];
-  const toName = currentTags[index];
 
+  // Both target indices are captured above, before either array is mutated
+  // — reusing them post-removal (rather than re-locating the target by name
+  // afterward) is what makes this symmetric: dragging right lands the tag
+  // just AFTER the target (the target shifted left into fromIndex's old
+  // slot), dragging left lands it just BEFORE (nothing shifted yet at that
+  // point). Same trick reorderReviewTabs/reorderSubTabs already use.
   if (scope === 'core') {
-    currentCoreTags = currentCoreTags.filter(n => n.toLowerCase() !== fromName.toLowerCase());
-    currentCoreTags.splice(currentCoreTags.findIndex(n => n.toLowerCase() === toName.toLowerCase()), 0, fromName);
+    const fromName = currentTags[fromIndex];
+    const coreFrom = currentCoreTags.findIndex(n => n.toLowerCase() === fromName.toLowerCase());
+    const coreTo = currentCoreTags.findIndex(n => n.toLowerCase() === currentTags[toIndex].toLowerCase());
+    const [moved] = currentCoreTags.splice(coreFrom, 1);
+    currentCoreTags.splice(coreTo, 0, moved);
   } else {
     const [moved] = currentTags.splice(fromIndex, 1);
-    currentTags.splice(currentTags.indexOf(toName), 0, moved);
+    currentTags.splice(toIndex, 0, moved);
   }
   renderTags();
   updatePreview();
