@@ -190,9 +190,14 @@
     .form-tab-close {
       background: none; color: var(--muted); padding: 0 0.15rem;
       font-size: 0.85rem; line-height: 1; border-radius: 50%;
+      cursor: pointer; /* override the draggable parent's cursor:grab it would otherwise inherit */
     }
     .form-tab-close:hover { color: var(--text); }
     .form-tab-add { padding: 0.35rem 0.65rem; font-weight: 700; }
+    /* Applied alongside .form-tab/.form-subtab for their delete-confirm state
+       (see renderReviewTabs/renderSubTabBar) — same pill shape, but the text
+       itself isn't clickable, only the ✓/✗ buttons deleteConfirmRow renders. */
+    .form-tab-confirm { cursor: default; white-space: nowrap; }
 
     .sub-tab-bar { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; padding: 0.5rem 0 0.4rem; }
     .form-subtab {
@@ -757,9 +762,11 @@ let steamBody        = '';
 let extraTabs        = []; // [{ id, name, content }]
 let activeReviewTab  = 'steam';
 let draggedTabId     = null;
+let confirmingReviewTabDeleteId = null; // review tab id currently showing its inline "delete?" confirmation
 let activeSubTabs    = []; // [{ id, name, content }] — parsed from the active review tab's [tab=Name] blocks; empty means plain (unsplit) content
 let activeSubTabId   = null; // id of the sub-tab currently shown in the editor, or null when activeSubTabs is empty
 let draggedSubTabId  = null;
+let confirmingSubTabDeleteId = null; // sub-tab id currently showing its inline "delete?" confirmation
 let sitePreviewExpanded = true;
 let sitePreviewBodyTab  = 'steam';
 let sitePreviewSubTab   = 0;
@@ -1512,10 +1519,22 @@ function addReviewTabFromTemplate(templateId) {
   addReviewTab(template.name, template.content);
 }
 
-function deleteReviewTab(e, id) {
+function startDeleteReviewTab(e, id) {
   e.stopPropagation();
+  confirmingReviewTabDeleteId = id;
+  renderReviewTabs();
+}
+
+function cancelDeleteReviewTab() {
+  confirmingReviewTabDeleteId = null;
+  renderReviewTabs();
+}
+
+function confirmDeleteReviewTab(id) {
+  confirmingReviewTabDeleteId = null;
   const idx = extraTabs.findIndex(t => t.id === id);
-  if (idx === -1) return;
+  if (idx === -1) { renderReviewTabs(); return; }
+
   extraTabs.splice(idx, 1);
   if (activeReviewTab === id) {
     activeReviewTab = 'steam';
@@ -1575,10 +1594,22 @@ function addSubTab() {
   updatePreview();
 }
 
-function deleteSubTab(e, id) {
+function startDeleteSubTab(e, id) {
   e.stopPropagation();
+  confirmingSubTabDeleteId = id;
+  renderSubTabBar();
+}
+
+function cancelDeleteSubTab() {
+  confirmingSubTabDeleteId = null;
+  renderSubTabBar();
+}
+
+function confirmDeleteSubTab(id) {
+  confirmingSubTabDeleteId = null;
   const idx = activeSubTabs.findIndex(t => t.id === id);
-  if (idx === -1) return;
+  if (idx === -1) { renderSubTabBar(); return; }
+
   activeSubTabs.splice(idx, 1);
   if (activeSubTabId === id) {
     activeSubTabId = activeSubTabs[0]?.id || null;
@@ -1633,7 +1664,7 @@ function startRenameSubTab(e, id) {
   const closeBtn = document.createElement('span');
   closeBtn.className = 'form-tab-close';
   closeBtn.textContent = '×';
-  closeBtn.onclick = ev => deleteSubTab(ev, id);
+  closeBtn.onclick = ev => startDeleteSubTab(ev, id);
 
   wrapper.appendChild(input);
   wrapper.appendChild(closeBtn);
@@ -1651,10 +1682,14 @@ function renderSubTabBar() {
     return;
   }
 
-  const tabsHtml = activeSubTabs.map(t => `
+  const tabsHtml = activeSubTabs.map(t => confirmingSubTabDeleteId === t.id ? `
+    <span class="form-subtab form-tab-confirm">
+      ${deleteConfirmRow(t.name, `confirmDeleteSubTab('${t.id}')`, `cancelDeleteSubTab()`)}
+    </span>
+  ` : `
     <button type="button" class="form-subtab ${activeSubTabId === t.id ? 'active' : ''}" data-subtab-id="${escHtml(t.id)}" draggable="true">
       <span class="form-tab-label">${escHtml(t.name)}</span>
-      <span class="form-tab-close" onclick="deleteSubTab(event, '${t.id}')">&times;</span>
+      <span class="form-tab-close" onclick="startDeleteSubTab(event, '${t.id}')">&times;</span>
     </button>
   `).join('');
 
@@ -1733,7 +1768,7 @@ function startRenameTab(e, id) {
   const closeBtn = document.createElement('span');
   closeBtn.className = 'form-tab-close';
   closeBtn.textContent = '×';
-  closeBtn.onclick = ev => deleteReviewTab(ev, id);
+  closeBtn.onclick = ev => startDeleteReviewTab(ev, id);
 
   wrapper.appendChild(input);
   wrapper.appendChild(closeBtn);
@@ -1744,10 +1779,14 @@ function startRenameTab(e, id) {
 
 function renderReviewTabs() {
   const el = document.getElementById('review-tabs');
-  const extraHtml = extraTabs.map(t => `
+  const extraHtml = extraTabs.map(t => confirmingReviewTabDeleteId === t.id ? `
+    <span class="form-tab form-tab-confirm">
+      ${deleteConfirmRow(t.name, `confirmDeleteReviewTab('${t.id}')`, `cancelDeleteReviewTab()`)}
+    </span>
+  ` : `
     <button type="button" class="form-tab ${activeReviewTab === t.id ? 'active' : ''}" data-tab-id="${escHtml(t.id)}" draggable="true">
       <span class="form-tab-label">${escHtml(t.name)}</span>
-      <span class="form-tab-close" onclick="deleteReviewTab(event, '${t.id}')">&times;</span>
+      <span class="form-tab-close" onclick="startDeleteReviewTab(event, '${t.id}')">&times;</span>
     </button>
   `).join('');
 
