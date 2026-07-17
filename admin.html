@@ -591,19 +591,23 @@
         <input id="f-id" type="text" placeholder="e.g. elden-ring" readonly>
       </label>
 
+      <label>Cover Image URL (optional)
+        <input id="f-cover" type="url" placeholder="https://..." oninput="updatePreview()">
+      </label>
+
+      <label>Hours Played
+        <input id="f-hours" type="number" min="0" value="0" oninput="updatePreview()">
+      </label>
+
+      <label>Date Posted
+        <input id="f-date" type="date" oninput="updatePreview()">
+      </label>
+
       <label>Recommendation
         <div class="radio-row">
           <label><input type="radio" name="recommended" value="true" checked onchange="updatePreview()"> Recommended</label>
           <label><input type="radio" name="recommended" value="false" onchange="updatePreview()"> Not Recommended</label>
         </div>
-      </label>
-
-      <label>Summary (short tagline)
-        <input id="f-summary" type="text" placeholder="One sentence hook" spellcheck="true" oninput="updatePreview()">
-      </label>
-
-      <label>Cover Image URL (optional)
-        <input id="f-cover" type="url" placeholder="https://..." oninput="updatePreview()">
       </label>
 
       <div class="dyn-section">
@@ -628,12 +632,8 @@
         </div>
       </div>
 
-      <label>Hours Played
-        <input id="f-hours" type="number" min="0" value="0" oninput="updatePreview()">
-      </label>
-
-      <label>Date Posted
-        <input id="f-date" type="date" oninput="updatePreview()">
+      <label>Summary (short tagline)
+        <input id="f-summary" type="text" placeholder="One sentence hook" spellcheck="true" oninput="updatePreview()">
       </label>
 
       <div class="dyn-section">
