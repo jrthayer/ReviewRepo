@@ -2267,11 +2267,6 @@ function onTagKeydown(e) {
     return;
   }
 
-  if (e.key === 'Backspace' && !e.target.value && currentTags.length) {
-    removeTagAt(currentTags.length - 1);
-    return;
-  }
-
   if (e.key === 'Escape') {
     e.preventDefault();
     cancelAddTag();
