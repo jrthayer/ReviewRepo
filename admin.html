@@ -340,6 +340,7 @@
       cursor: grab;
     }
     .tag-chip:active { cursor: grabbing; }
+    .tag-chip.drag-over-chip { outline: 2px solid var(--accent); outline-offset: 1px; }
     .tag-chip button {
       background: none; color: var(--muted); padding: 0 0.2rem;
       font-size: 0.85rem; line-height: 1; border-radius: 50%;
@@ -2034,36 +2035,45 @@ function getAllTags() {
 // shared.js for that leaner version.
 function renderTags() {
   const box = document.getElementById('tags-chips');
-  const categoryOf = name => tagRegistry.find(t => t.name.toLowerCase() === name.toLowerCase())?.category || '';
   // Trailing synthetic "Uncategorized" line, not a real category. id must be
   // falsy-but-not-null: renamingTagCategoryId defaults to null when nothing's
   // being renamed, and null === null would otherwise put this line into its
   // own rename editor from the very first render.
   const lines = [...tagCategories, { id: '', name: '' }];
 
-  const chip = (name, index, onRemove) => `
-    <span class="tag-chip" draggable="true" ondragstart="onTagChipDragStart(event, ${index})" ondragend="onTagChipDragEnd()">
+  // `scope` picks which chip-level dragover/drop pair (onTagChipDragOver/Drop
+  // below) applies: 'category' reorders within currentTags (a category
+  // line's chip order is just currentTags filtered by category), 'core'
+  // reorders within currentCoreTags instead. Dropping one chip directly onto
+  // another with matching scope+group reorders in place; anything else (a
+  // drop across categories, or onto/from a chip that isn't core) bails out
+  // of the chip handler (no preventDefault/stopPropagation) so the event
+  // bubbles up to the containing .tag-chip-group's line-level drop —
+  // onTagLineDrop (recategorize) or onCoreTagsLineDrop (add to core).
+  const chip = (name, index, onRemove, scope = 'category') => `
+    <span class="tag-chip" draggable="true" ondragstart="onTagChipDragStart(event, ${index})" ondragend="onTagChipDragEnd()"
+      ondragover="onTagChipDragOver(event, ${index}, '${scope}')" ondragleave="onTagChipDragLeave(event)" ondrop="onTagChipDrop(event, ${index}, '${scope}')">
       ${escHtml(name)}<button type="button" onclick="${onRemove ?? `removeTagAt(${index})`}">×</button>
     </span>`;
 
   // Core Tags is a review-local drop line, not a real tagCategories entry —
   // it doesn't recategorize a tag (see onCoreTagsLineDrop), just flags it to
   // also render on the card via r.coreTags (see renderCoreTags, shared.js).
-  // Rendered in currentCoreTags order (meaningful once tag ordering lands),
-  // not currentTags order.
+  // Rendered in currentCoreTags order, which chip-level reordering (scope
+  // 'core' above) edits directly.
   const coreEntries = currentCoreTags
     .map(name => ({ name, index: currentTags.findIndex(t => t.toLowerCase() === name.toLowerCase()) }))
     .filter(e => e.index !== -1);
   const coreLine = `
     <div class="tag-chip-group tag-chip-group-core" ondragover="onTagLineDragOver(event)" ondragleave="onTagLineDragLeave(event)" ondrop="onCoreTagsLineDrop(event)">
       <span class="tag-group-label tag-group-label-core">Core Tags</span>
-      ${coreEntries.map(e => chip(e.name, e.index, `removeCoreTag('${escHtml(e.name).replace(/'/g, "\\'")}')`)).join('')}
+      ${coreEntries.map(e => chip(e.name, e.index, `removeCoreTag('${escHtml(e.name).replace(/'/g, "\\'")}')`, 'core')).join('')}
     </div>`;
 
   box.innerHTML = coreLine + lines.map(cat => {
     const entries = currentTags
       .map((name, index) => ({ name, index }))
-      .filter(e => categoryOf(e.name) === cat.name);
+      .filter(e => tagCategoryOf(e.name) === cat.name);
 
     const label = renamingTagCategoryId === cat.id
       ? `<span class="tag-group-rename-editor">
@@ -2163,6 +2173,70 @@ function onTagChipDragStart(e, index) {
 
 function onTagChipDragEnd() {
   draggedTagIndex = null;
+}
+
+// Same-category tag order lives entirely in currentTags' own array order —
+// each category line's chip order is just currentTags filtered by category,
+// so reordering within a category only ever needs to move the dragged tag's
+// position in currentTags, nothing else. That makes tag order per-review
+// (currentTags is the review's own r.tags) with no separate field needed.
+// Core Tags order works the same way, just against currentCoreTags instead.
+function tagCategoryOf(name) {
+  return tagRegistry.find(t => t.name.toLowerCase() === name.toLowerCase())?.category || '';
+}
+
+function isCoreTag(name) {
+  return currentCoreTags.some(n => n.toLowerCase() === name.toLowerCase());
+}
+
+// Whether dragging fromIndex onto toIndex (both currentTags indices) is a
+// same-group reorder for the given scope, vs. a cross-group drag that should
+// bubble up to the line-level drop instead. 'core' requires BOTH chips to
+// already be core — dragging a non-core tag onto a Core Tags chip is "add to
+// core", handled by onCoreTagsLineDrop once this returns false and the event
+// bubbles to the containing .tag-chip-group-core.
+function sameTagGroup(fromIndex, toIndex, scope) {
+  const fromName = currentTags[fromIndex];
+  const toName = currentTags[toIndex];
+  if (!fromName || !toName) return false;
+  return scope === 'core'
+    ? isCoreTag(fromName) && isCoreTag(toName)
+    : tagCategoryOf(fromName) === tagCategoryOf(toName);
+}
+
+function onTagChipDragOver(e, index, scope) {
+  if (draggedTagIndex === null || draggedTagIndex === index) return;
+  if (!sameTagGroup(draggedTagIndex, index, scope)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  e.currentTarget.classList.add('drag-over-chip');
+}
+
+function onTagChipDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over-chip');
+}
+
+function onTagChipDrop(e, index, scope) {
+  if (draggedTagIndex === null || draggedTagIndex === index) return;
+  if (!sameTagGroup(draggedTagIndex, index, scope)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  e.currentTarget.classList.remove('drag-over-chip');
+
+  const fromIndex = draggedTagIndex;
+  draggedTagIndex = null;
+  const fromName = currentTags[fromIndex];
+  const toName = currentTags[index];
+
+  if (scope === 'core') {
+    currentCoreTags = currentCoreTags.filter(n => n.toLowerCase() !== fromName.toLowerCase());
+    currentCoreTags.splice(currentCoreTags.findIndex(n => n.toLowerCase() === toName.toLowerCase()), 0, fromName);
+  } else {
+    const [moved] = currentTags.splice(fromIndex, 1);
+    currentTags.splice(currentTags.indexOf(toName), 0, moved);
+  }
+  renderTags();
+  updatePreview();
 }
 
 function onTagLineDragOver(e) {
@@ -2303,9 +2377,8 @@ function filterTagSuggestions() {
 
   if (!hits.length && !q) { box.className = ''; box.innerHTML = ''; return; }
 
-  const categoryOf = name => tagRegistry.find(t => t.name.toLowerCase() === name.toLowerCase())?.category || '';
   let html = hits.slice(0, 12).map(t => {
-    const cat = categoryOf(t);
+    const cat = tagCategoryOf(t);
     return `<div class="tag-suggestion" onmousedown="addTag('${escHtml(t).replace(/'/g, "\\'")}')">${escHtml(t)}${cat ? ` <span class="tag-suggestion-cat">${escHtml(cat)}</span>` : ''}</div>`;
   }).join('');
   const exactMatch = available.some(t => t.toLowerCase() === q) || currentTags.some(t => t.toLowerCase() === q);
