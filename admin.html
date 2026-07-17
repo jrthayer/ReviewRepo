@@ -280,6 +280,12 @@
     }
     .dropdown-remove:hover { color: var(--text); }
     .dropdown-empty { padding: 0.5rem 0.6rem; font-size: 0.78rem; color: var(--muted); }
+    .dropdown-search {
+      position: sticky; top: 0;
+      background: var(--surface);
+      padding: 0.3rem; border-bottom: 1px solid var(--border);
+    }
+    .dropdown-search input { width: 100%; box-sizing: border-box; }
 
     .review-editor textarea {
       border: none; border-radius: 0; background: transparent;
@@ -627,7 +633,12 @@
           <span class="tags-actions">
             <div class="dropdown-wrap manage-tags-wrap">
               <button type="button" class="sm secondary" onclick="toggleManageTagsDropdown(event)" title="Delete tags from the global registry">Manage Tags &#9662;</button>
-              <div id="manage-tags-dropdown" class="dropdown-menu"></div>
+              <div id="manage-tags-dropdown" class="dropdown-menu">
+                <div class="dropdown-search">
+                  <input type="text" id="manage-tags-search" class="save-block-input" placeholder="Search tags..." oninput="renderManageTagsDropdown()">
+                </div>
+                <div id="manage-tags-list"></div>
+              </div>
             </div>
             <button type="button" class="sm secondary" id="add-tag-btn" onclick="startAddTag(event)" title="Add a tag to this review">+ Add Tag</button>
             <span id="tag-input-wrap" style="display:none">
@@ -797,6 +808,7 @@ let draggedTagIndex          = null; // index into currentTags of the chip curre
 let renamingTagCategoryId    = null; // category id currently showing its inline rename editor (input + confirm/cancel) in the tag chip editor
 let confirmingTagCatDeleteId = null; // category id currently showing its inline "delete?" confirmation in the tag chip editor
 let confirmingTagDeleteId    = null; // registry tag id currently showing its inline "delete?" confirmation in the Manage Tags dropdown
+let renamingTagId            = null; // registry tag id currently showing its inline rename editor in the Manage Tags dropdown
 let tagsDirty                = false; // true when tagRegistry/tagCategories have local edits not yet pushed to GitHub — committed together with the next review save (ghCommitFiles), not per-action
 
 // ── Constants & helpers ────────────────────────────────────────────────────────
@@ -2577,21 +2589,43 @@ function reassignRegistryTag(id, category) {
   updatePreview();
 }
 
-// "Manage Tags ▾" — the one place to browse and delete from the *global*
-// tag registry (data/tags.json), independent of whatever tags happen to be
-// on the review currently open (renderTags' chip editor only ever shows
-// those). Unlike every other tag/category edit, deleting a tag here does
-// NOT go through the local-draft/markTagsDirty()/next-save path (see
-// confirmDeleteRegistryTag) — it cascades into every review's tags/coreTags,
-// which nothing else in this feature touches, so it pushes to GitHub
-// immediately instead of waiting for whatever review happens to be open
-// next to be saved.
+// "Manage Tags ▾" — the one place to browse, rename, and delete from the
+// *global* tag registry (data/tags.json), independent of whatever tags
+// happen to be on the review currently open (renderTags' chip editor only
+// ever shows those). Unlike every other tag/category edit, renaming or
+// deleting a tag here does NOT go through the local-draft/markTagsDirty()/
+// next-save path (see confirmRenameRegistryTag/confirmDeleteRegistryTag) —
+// both cascade into every review's tags/coreTags, which nothing else in
+// this feature touches, so they push to GitHub immediately instead of
+// waiting for whatever review happens to be open next to be saved.
 function renderManageTagsDropdown() {
-  const el = document.getElementById('manage-tags-dropdown');
-  if (!tagRegistry.length) { el.innerHTML = '<div class="dropdown-empty">No tags yet.</div>'; return; }
+  // The search input lives outside this function's innerHTML target
+  // (#manage-tags-list, not #manage-tags-dropdown itself) so it's never
+  // rebuilt/recreated on every keystroke — that would drop focus and cursor
+  // position mid-type.
+  const el = document.getElementById('manage-tags-list');
+  const query = (document.getElementById('manage-tags-search')?.value || '').trim().toLowerCase();
+  const matches = query ? tagRegistry.filter(t => t.name.toLowerCase().includes(query)) : tagRegistry;
 
-  const sorted = [...tagRegistry].sort((a, b) => a.name.localeCompare(b.name));
+  if (!matches.length) {
+    el.innerHTML = `<div class="dropdown-empty">${tagRegistry.length ? 'No matching tags.' : 'No tags yet.'}</div>`;
+    return;
+  }
+
+  const sorted = [...matches].sort((a, b) => a.name.localeCompare(b.name));
   el.innerHTML = sorted.map(t => {
+    if (renamingTagId === t.id) {
+      return `
+        <div class="dropdown-item dropdown-item-confirm">
+          <span class="tag-group-rename-editor">
+            <input type="text" class="save-block-input" id="rename-tag-name" value="${escHtml(t.name)}"
+                   onkeydown="onInlineEditorKeydown(event, () => confirmRenameRegistryTag('${t.id}'), cancelRenameRegistryTag)" onblur="cancelRenameRegistryTag()">
+            <button type="button" onmousedown="event.preventDefault()" onclick="confirmRenameRegistryTag('${t.id}')" title="Save name">&check;</button>
+            <button type="button" onmousedown="event.preventDefault()" onclick="cancelRenameRegistryTag()" title="Cancel">&times;</button>
+          </span>
+        </div>
+      `;
+    }
     if (confirmingTagDeleteId === t.id) {
       return `
         <div class="dropdown-item dropdown-item-confirm">
@@ -2601,22 +2635,122 @@ function renderManageTagsDropdown() {
     }
     return `
       <div class="dropdown-item">
-        <span>${escHtml(t.name)}${t.category ? ` <span class="tag-suggestion-cat">${escHtml(t.category)}</span>` : ''}</span>
+        <span class="tag-group-label-editable" onclick="startRenameRegistryTag(event, '${t.id}')" title="Click to rename">${escHtml(t.name)}${t.category ? ` <span class="tag-suggestion-cat">${escHtml(t.category)}</span>` : ''}</span>
         <button type="button" class="dropdown-remove" onclick="startDeleteRegistryTag(event, '${t.id}')" title="Delete this tag">&times;</button>
       </div>
     `;
   }).join('');
+
+  if (renamingTagId !== null) {
+    const input = document.getElementById('rename-tag-name');
+    if (input) { input.focus(); input.select(); }
+  }
 }
 
 function toggleManageTagsDropdown(e) {
   e.stopPropagation();
-  renderManageTagsDropdown();
-  document.getElementById('manage-tags-dropdown').classList.toggle('open');
+  const dropdown = document.getElementById('manage-tags-dropdown');
+  const opening = !dropdown.classList.contains('open');
+  dropdown.classList.toggle('open');
+  if (opening) {
+    const search = document.getElementById('manage-tags-search');
+    if (search) search.value = '';
+    renderManageTagsDropdown();
+    search?.focus();
+  }
 }
 
 function closeManageTagsDropdown() {
   document.getElementById('manage-tags-dropdown').classList.remove('open');
   confirmingTagDeleteId = null;
+  renamingTagId = null;
+}
+
+function startRenameRegistryTag(e, id) {
+  e.stopPropagation();
+  renamingTagId = id;
+  renderManageTagsDropdown();
+}
+
+function cancelRenameRegistryTag() {
+  renamingTagId = null;
+  renderManageTagsDropdown();
+}
+
+// Renaming a registry tag has to cascade into reviews.json exactly like
+// deletion does (see confirmDeleteRegistryTag) — a tag's name isn't just a
+// registry field, it's literally the string stored in every review's
+// tags/coreTags, so leaving those alone would just orphan the old name on
+// every review that used it while the registry silently points at a new,
+// unused one. Guards against colliding with an existing different tag
+// (case-insensitive) rather than silently merging two tags into one.
+async function confirmRenameRegistryTag(id) {
+  const input = document.getElementById('rename-tag-name');
+  const newName = input ? input.value.trim() : '';
+  renamingTagId = null;
+
+  const tag = tagRegistry.find(t => t.id === id);
+  if (!tag || !newName || newName === tag.name) { renderManageTagsDropdown(); return; }
+
+  const oldName = tag.name;
+  const oldLower = oldName.toLowerCase();
+  const newLower = newName.toLowerCase();
+  if (tagRegistry.some(t => t.id !== id && t.name.toLowerCase() === newLower)) {
+    setSt('save-status', `A tag named "${newName}" already exists.`, true);
+    renderManageTagsDropdown();
+    return;
+  }
+
+  const { owner, repo, token } = getCfg();
+  if (!owner || !repo || !token) { setSt('save-status', 'Configure GitHub settings first.', true); renderManageTagsDropdown(); return; }
+
+  const nextRegistry = tagRegistry.map(t => t.id === id ? { ...t, name: newName } : t);
+  const rename = name => name.toLowerCase() === oldLower ? newName : name;
+
+  setSt('save-status', 'Renaming tag...', false);
+  try {
+    const { reviews: latest } = await fetchFile();
+    const updated = latest.map(r => ({
+      ...r,
+      tags: (r.tags || []).map(rename),
+      coreTags: (r.coreTags || []).map(rename),
+    }));
+
+    const { blobShas } = await ghCommitFiles(
+      [
+        { path: 'data/reviews.json', data: updated },
+        { path: 'data/tag-categories.json', data: tagCategories },
+        { path: 'data/tags.json', data: nextRegistry },
+      ],
+      `Rename tag: ${oldName} → ${newName}`
+    );
+    fileSha = blobShas[0];
+
+    tagRegistry = nextRegistry;
+    reviews = updated;
+    cacheReviews(reviews);
+    savedTagCategories = tagCategories.map(c => ({ ...c }));
+    savedTagRegistry = tagRegistry.map(t => ({ ...t }));
+    cacheTagCategories(tagCategories);
+    cacheTagRegistry(tagRegistry);
+    clearTagsDirty();
+
+    currentTags = currentTags.map(rename);
+    currentCoreTags = currentCoreTags.map(rename);
+    if (savedFormState && editingId) {
+      savedFormState.tags = savedFormState.tags.map(rename);
+      savedFormState.coreTags = (savedFormState.coreTags || []).map(rename);
+    }
+
+    renderList();
+    renderTags();
+    renderManageTagsDropdown();
+    updatePreview();
+    setSt('save-status', 'Tag renamed.', false);
+  } catch (e) {
+    setSt('save-status', e.message, true);
+    renderManageTagsDropdown();
+  }
 }
 
 function startDeleteRegistryTag(e, id) {
