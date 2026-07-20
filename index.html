@@ -20,7 +20,10 @@
     <input type="text" id="title-search" placeholder="Search by game name..." autocomplete="off">
     <button id="tag-filters-toggle" aria-label="Toggle tag filters" title="Show/hide tag filters">&#9776;</button>
   </div>
-  <div id="tag-filters"></div>
+  <div id="tag-filters" class="collapsed"></div>
+  <div id="recommend-filter-row">
+    <button class="tag-filter" id="recommend-filter-btn">Recommended?</button>
+  </div>
   <main id="app"></main>
   <script>
     const _sh = document.createElement('script');

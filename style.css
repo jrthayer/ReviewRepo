@@ -74,7 +74,7 @@ header {
 
 #app {
   max-width: 860px;
-  margin: 2rem auto;
+  margin: 3rem auto 3rem;
   padding: 0 1rem;
 }
 
@@ -113,17 +113,33 @@ header {
 }
 
 #tag-filters-toggle:hover { color: var(--text); border-color: var(--accent); }
+#tag-filters-toggle.open { font-size: 1.1rem; }
 
 #tag-filters {
-  max-width: 860px;
+  /* #app itself has no visible border, so its true 860px extent is never
+     apparent — only its .card children are, inset by #app's own 1rem
+     padding on each side. #tag-filters' border/background makes its own
+     edge directly visible, so it needs that same 2rem taken off to match
+     the cards' effective width instead of reading as wider than them. */
+  max-width: calc(860px - 2rem);
   margin: 1.5rem auto 0;
-  padding: 0 1rem 1rem;
+  padding: 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }
 
 #tag-filters.collapsed { display: none; }
+
+#recommend-filter-row {
+  max-width: calc(860px - 2rem);
+  margin: 1rem auto 0;
+  display: flex;
+  justify-content: flex-start;
+}
 
 #tag-filters-top {
   display: flex;
@@ -131,8 +147,8 @@ header {
 
 #tag-search {
   flex: 1;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--border);
+  border: 1px solid transparent;
   border-radius: 8px;
   padding: 0.4rem 0.85rem;
   font-size: 0.85rem;
@@ -150,13 +166,17 @@ header {
 
 #tag-filters-bottom {
   display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
 }
 
 .tag-filter-empty { color: var(--muted); font-size: 0.85rem; }
 
 .tag-filter {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--border);
+  border: 1px solid transparent;
   color: var(--muted);
   border-radius: 999px;
   padding: 0.3rem 0.85rem;

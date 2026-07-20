@@ -12,9 +12,29 @@ let tagSearchQuery = '';
 // Filters the review list itself (unlike tagSearchQuery, which only narrows
 // which tag pills show).
 let titleSearchQuery = '';
+// Same tri-state cycle as tagFilterState, for the single Recommended toggle
+// below the tag filter section: undefined (neutral) -> 'include' (must be
+// recommended) -> 'exclude' (must be not recommended) -> neutral.
+let recommendedFilter;
 let expandedBodyTab = 'steam';
 let expandedSubTab = 0;
 let showAllTags = false;
+
+// Advances a tri-state filter value (undefined -> 'include' -> 'exclude' ->
+// undefined), shared by tag pills and the Recommended toggle.
+function cycleTriState(cur) {
+  return cur === undefined ? 'include' : cur === 'include' ? 'exclude' : undefined;
+}
+
+// Hamburger when the tag filter panel is collapsed, × when it's open —
+// called after anything that changes #tag-filters' collapsed state (the
+// toggle itself, and the panel's own Close button).
+function updateTagFiltersToggleIcon() {
+  const collapsed = document.getElementById('tag-filters').classList.contains('collapsed');
+  const btn = document.getElementById('tag-filters-toggle');
+  btn.innerHTML = collapsed ? '&#9776;' : '&times;';
+  btn.classList.toggle('open', !collapsed);
+}
 
 async function init() {
   const cachedReviews = localStorage.getItem('gh_reviews_cache');
@@ -53,6 +73,17 @@ async function init() {
   // filters already applied stay applied while the panel is hidden.
   document.getElementById('tag-filters-toggle').addEventListener('click', () => {
     document.getElementById('tag-filters').classList.toggle('collapsed');
+    updateTagFiltersToggleIcon();
+  });
+
+  document.getElementById('recommend-filter-btn').addEventListener('click', e => {
+    recommendedFilter = cycleTriState(recommendedFilter);
+    e.target.classList.toggle('included', recommendedFilter === 'include');
+    e.target.classList.toggle('excluded', recommendedFilter === 'exclude');
+    e.target.textContent = recommendedFilter === 'include' ? 'Recommended'
+      : recommendedFilter === 'exclude' ? 'Not Recommended'
+      : 'Recommended?';
+    render();
   });
 
   render();
@@ -84,8 +115,8 @@ function renderTagFilters() {
   const el = document.getElementById('tag-filters');
   if (!allTagNamesSorted().length) { el.innerHTML = ''; return; }
 
-  // The search input + Clear button are built once and never rebuilt by
-  // subsequent renders (e.g. from an unrelated card click) — only
+  // The search input + Clear/Close buttons are built once and never rebuilt
+  // by subsequent renders (e.g. from an unrelated card click) — only
   // renderTagFilterGroups()'s own container gets replaced, so typing in the
   // search box never loses focus or cursor position mid-keystroke.
   if (!document.getElementById('tag-filters-top')) {
@@ -95,7 +126,8 @@ function renderTagFilters() {
       </div>
       <div id="tag-filter-groups"></div>
       <div id="tag-filters-bottom">
-        <button class="tag-filter" id="tag-filter-clear">Clear</button>
+        <button class="tag-filter" id="tag-filter-clear">Clear Tags</button>
+        <button class="tag-filter" id="tag-filter-close">Close</button>
       </div>
     `;
     document.getElementById('tag-search').addEventListener('input', e => {
@@ -105,6 +137,12 @@ function renderTagFilters() {
     document.getElementById('tag-filter-clear').addEventListener('click', () => {
       tagFilterState.clear();
       render();
+    });
+    // Same panel this button lives in is only visible when open, so this
+    // always means "close" — no need to toggle like the hamburger does.
+    document.getElementById('tag-filter-close').addEventListener('click', () => {
+      document.getElementById('tag-filters').classList.add('collapsed');
+      updateTagFiltersToggleIcon();
     });
   }
 
@@ -136,8 +174,7 @@ function renderTagFilterGroups() {
   el.querySelectorAll('.tag-filter[data-tag]').forEach(btn => {
     btn.addEventListener('click', () => {
       const name = btn.dataset.tag;
-      const cur = tagFilterState.get(name);
-      const next = cur === undefined ? 'include' : cur === 'include' ? 'exclude' : undefined;
+      const next = cycleTriState(tagFilterState.get(name));
       if (next === undefined) tagFilterState.delete(name); else tagFilterState.set(name, next);
       render();
     });
@@ -263,6 +300,8 @@ function render() {
   const titleQuery = titleSearchQuery.trim().toLowerCase();
   const visible = reviews.filter(r => {
     if (titleQuery && !r.title.toLowerCase().includes(titleQuery)) return false;
+    if (recommendedFilter === 'include' && !r.recommended) return false;
+    if (recommendedFilter === 'exclude' && r.recommended) return false;
     const tags = r.tags || [];
     if (excluded.some(t => tags.includes(t))) return false;
     return included.every(t => tags.includes(t));
