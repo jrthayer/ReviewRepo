@@ -154,9 +154,11 @@
       padding: 0.5rem 0.75rem;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
+      cursor: pointer; user-select: none;
     }
     .panel-hdr strong { font-size: 0.82rem; }
     #review-list { padding: 0.35rem; }
+    #review-list.collapsed { display: none; }
     .r-item button {
       background: none; color: var(--text); padding: 0.3rem 0.55rem;
       width: 100%; text-align: left; border-radius: 4px;
@@ -168,6 +170,10 @@
     /* ── Form ── */
     #review-form { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 2rem; }
     #form-heading { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.1rem; }
+
+    .section-toggle-row { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; margin: -0.5rem 0; padding: 0.5rem 0; }
+    .review-section-body { display: flex; flex-direction: column; gap: 0.75rem; }
+    .review-section-body.collapsed { display: none; }
 
     .dyn-section > label { margin-bottom: 0.25rem; }
 
@@ -305,8 +311,11 @@
     .import-actions { display: flex; align-items: center; gap: 0.6rem; }
 
     /* ── Tag input ── */
-    .tags-label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
+    .tags-label-row { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; margin: -0.5rem 0 -0.25rem; padding: 1rem 0 1rem; }
     .tags-label-row label { margin: 0; }
+    .section-toggle-label { display: inline-flex; align-items: center; gap: 0.4rem; }
+    .chevron { font-size: 0.6rem; color: var(--muted); }
+    .tag-chips.collapsed { display: none; }
     .tags-actions { display: inline-flex; align-items: center; gap: 0.4rem; }
     #tag-input-wrap { position: relative; display: inline-flex; align-items: center; gap: 0.3rem; }
     #tag-input-wrap button { padding: 0.25rem 0.5rem !important; min-width: auto !important; }
@@ -320,7 +329,7 @@
       transition: background 0.12s;
     }
     .tag-chip-group.drag-over { background: var(--border); outline: 1px dashed var(--accent); }
-    .tag-chip-group-core { border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; margin-bottom: 0.15rem; }
+    .tag-chip-group-core { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding-top: 0.4rem; padding-bottom: 0.4rem; margin-bottom: 0.15rem; }
     .tag-group-label-core { color: var(--accent); opacity: 1; }
     .tag-group-label {
       font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
@@ -406,6 +415,7 @@
     .g-hrs  { font-size: 0.72rem; color: var(--muted); flex-shrink: 0; }
     .g-msg  { padding: 0.4rem 0.6rem; font-size: 0.78rem; color: var(--muted); }
     .settings-sep { border: none; border-top: 1px solid var(--border); margin: 0.7rem 0 0.6rem; }
+    .form-sep { border: none; border-top: 3px solid var(--border); margin: 0.5rem 0; }
     .settings-label { font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
 
     /* ── Key visibility toggle ── */
@@ -617,22 +627,36 @@
     </div>
 
     <div id="existing-reviews">
-      <div class="panel-hdr">
-        <strong>Reviews</strong>
-        <button class="sm secondary" onclick="newReview()">+ New</button>
+      <div class="panel-hdr" onclick="toggleReviewListSection()" title="Show/hide review list">
+        <span class="section-toggle-label">
+          <strong>Reviews</strong>
+          <span class="chevron" id="review-list-chevron">&#9660;</span>
+        </span>
+        <button class="sm secondary" onclick="event.stopPropagation(); newReview()">+ New</button>
       </div>
       <div id="review-list">
         <p class="hint" style="padding:0.5rem 0.6rem">Enter GitHub settings above to load existing reviews.</p>
       </div>
     </div>
 
-    <div id="form-heading">New Review</div>
+    <hr class="form-sep">
+
+    <div class="section-toggle-row" onclick="toggleReviewSection()" title="Show/hide review details">
+      <span class="section-toggle-label">
+        <div id="form-heading">New Review</div>
+        <span class="chevron" id="review-section-chevron">&#9660;</span>
+      </span>
+    </div>
+
+    <hr class="settings-sep">
 
     <form id="review-form" onsubmit="return false">
 
       <label>Game Title
         <input id="f-title" type="text" placeholder="e.g. Elden Ring" spellcheck="true" oninput="syncId(); updatePreview()">
       </label>
+
+      <div id="review-section-body" class="review-section-body">
 
       <label>ID (URL slug — auto-filled)
         <input id="f-id" type="text" placeholder="e.g. elden-ring" readonly>
@@ -657,10 +681,17 @@
         </div>
       </label>
 
+      </div>
+
+      <hr class="form-sep">
+
       <div class="dyn-section">
-        <div class="tags-label-row">
-          <label>Tags</label>
-          <span class="tags-actions">
+        <div class="tags-label-row" onclick="toggleTagsSection()" title="Show/hide tags">
+          <span class="section-toggle-label">
+            <label>Tags</label>
+            <span class="chevron" id="tags-collapse-chevron">&#9660;</span>
+          </span>
+          <span class="tags-actions" onclick="event.stopPropagation()">
             <div class="dropdown-wrap manage-tags-wrap">
               <button type="button" class="sm secondary" onclick="toggleManageTagsDropdown(event)" title="Delete tags from the global registry">Manage Tags &#9662;</button>
               <div id="manage-tags-dropdown" class="dropdown-menu">
@@ -690,6 +721,8 @@
         </div>
         <div id="tags-chips" class="tag-chips"></div>
       </div>
+
+      <hr class="form-sep">
 
       <label>Summary (short tagline)
         <input id="f-summary" type="text" placeholder="One sentence hook" spellcheck="true" oninput="updatePreview()">
@@ -2716,6 +2749,24 @@ function renderManageTagsDropdown() {
     const input = document.getElementById('rename-tag-name');
     if (input) { input.focus(); input.select(); }
   }
+}
+
+function toggleTagsSection() {
+  const box = document.getElementById('tags-chips');
+  const collapsed = box.classList.toggle('collapsed');
+  document.getElementById('tags-collapse-chevron').innerHTML = collapsed ? '&#9650;' : '&#9660;';
+}
+
+function toggleReviewSection() {
+  const body = document.getElementById('review-section-body');
+  const collapsed = body.classList.toggle('collapsed');
+  document.getElementById('review-section-chevron').innerHTML = collapsed ? '&#9650;' : '&#9660;';
+}
+
+function toggleReviewListSection() {
+  const list = document.getElementById('review-list');
+  const collapsed = list.classList.toggle('collapsed');
+  document.getElementById('review-list-chevron').innerHTML = collapsed ? '&#9650;' : '&#9660;';
 }
 
 function toggleManageTagsDropdown(e) {
