@@ -1,5 +1,7 @@
 # Multi-select include/exclude tag filtering
 
+> Implemented in commit: [`dd915d4`](https://github.com/jrthayer/ReviewRepo/commit/dd915d4) — matches the plan as written, no design changes during implementation.
+
 ## Context
 
 The public site's tag filter bar (`#tag-filters` in `index.html`, rendered by `renderTagFilters()` in `app.js`) currently supports only a single active tag at a time (`activeTag`, a plain string-or-null), toggled by clicking a pill button. This adds the ability to filter by multiple tags at once, and to *exclude* reviews carrying a tag rather than only include them — matching the tag-filter behavior Steam itself uses, which this site already mirrors closely elsewhere (BBCode markup, Steam review copy, Steam library import).
