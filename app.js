@@ -9,6 +9,9 @@ let tagFilterState = new Map();
 // Narrows which tag pills renderTagFilterGroups() shows; doesn't affect
 // which reviews are visible (that's tagFilterState above).
 let tagSearchQuery = '';
+// Filters the review list itself (unlike tagSearchQuery, which only narrows
+// which tag pills show).
+let titleSearchQuery = '';
 let expandedBodyTab = 'steam';
 let expandedSubTab = 0;
 let showAllTags = false;
@@ -41,6 +44,16 @@ async function init() {
   if (requestedId && reviews.some(r => r.id === requestedId)) {
     expandedId = requestedId;
   }
+
+  document.getElementById('title-search').addEventListener('input', e => {
+    titleSearchQuery = e.target.value;
+    render();
+  });
+  // Pure visibility toggle — doesn't touch tagFilterState/tagSearchQuery, so
+  // filters already applied stay applied while the panel is hidden.
+  document.getElementById('tag-filters-toggle').addEventListener('click', () => {
+    document.getElementById('tag-filters').classList.toggle('collapsed');
+  });
 
   render();
 
@@ -247,7 +260,9 @@ function render() {
   const app = document.getElementById('app');
   const included = [...tagFilterState].filter(([, s]) => s === 'include').map(([t]) => t);
   const excluded = [...tagFilterState].filter(([, s]) => s === 'exclude').map(([t]) => t);
+  const titleQuery = titleSearchQuery.trim().toLowerCase();
   const visible = reviews.filter(r => {
+    if (titleQuery && !r.title.toLowerCase().includes(titleQuery)) return false;
     const tags = r.tags || [];
     if (excluded.some(t => tags.includes(t))) return false;
     return included.every(t => tags.includes(t));
@@ -258,7 +273,7 @@ function render() {
     return;
   }
   if (!visible.length) {
-    app.innerHTML = '<p class="state-msg">No reviews match these tag filters.</p>';
+    app.innerHTML = '<p class="state-msg">No reviews match these filters.</p>';
     return;
   }
 
