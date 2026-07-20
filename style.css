@@ -210,7 +210,7 @@ header {
   border-color: var(--accent);
 }
 
-.card.expanded {
+.card.expanded:not(:first-of-type) {
   margin-top: 3rem;
 }
 
