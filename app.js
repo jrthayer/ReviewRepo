@@ -2,7 +2,10 @@ let reviews = [];
 let tagRegistry = [];
 let tagCategories = [];
 let expandedId = null;
-let activeTag = null;
+// Tag name -> 'include' | 'exclude'; absent means neutral. A review must
+// have every 'include' tag (AND) and none of the 'exclude' tags, matching
+// Steam's own tag-filter behavior.
+let tagFilterState = new Map();
 let expandedBodyTab = 'steam';
 let expandedSubTab = 0;
 let showAllTags = false;
@@ -67,18 +70,30 @@ function renderTagFilters() {
   if (!names.length) { el.innerHTML = ''; return; }
 
   const groups = groupTagNames(names, tagRegistry);
-  const filterBtn = name => `<button class="tag-filter ${activeTag === name ? 'active' : ''}" data-tag="${escHtml(name)}">${escHtml(name)}</button>`;
+  const filterBtn = name => {
+    const state = tagFilterState.get(name);
+    const cls = state ? ` ${state}d` : '';
+    return `<button class="tag-filter${cls}" data-tag="${escHtml(name)}">${escHtml(name)}</button>`;
+  };
 
   el.innerHTML = [
-    `<button class="tag-filter ${activeTag === null ? 'active' : ''}" data-tag="">All</button>`,
+    `<button class="tag-filter" id="tag-filter-clear">Clear</button>`,
     ...groups.map(g => g.category
       ? `<div class="tag-group"><span class="tag-group-label">${escHtml(g.category)}</span>${g.entries.map(e => filterBtn(e.name)).join('')}</div>`
       : g.entries.map(e => filterBtn(e.name)).join('')),
   ].join('');
 
-  el.querySelectorAll('.tag-filter').forEach(btn => {
+  document.getElementById('tag-filter-clear').addEventListener('click', () => {
+    tagFilterState.clear();
+    render();
+  });
+
+  el.querySelectorAll('.tag-filter[data-tag]').forEach(btn => {
     btn.addEventListener('click', () => {
-      activeTag = btn.dataset.tag || null;
+      const name = btn.dataset.tag;
+      const cur = tagFilterState.get(name);
+      const next = cur === undefined ? 'include' : cur === 'include' ? 'exclude' : undefined;
+      if (next === undefined) tagFilterState.delete(name); else tagFilterState.set(name, next);
       render();
     });
   });
@@ -198,14 +213,20 @@ function render() {
   renderTagFilters();
 
   const app = document.getElementById('app');
-  const visible = activeTag ? reviews.filter(r => (r.tags || []).includes(activeTag)) : reviews;
+  const included = [...tagFilterState].filter(([, s]) => s === 'include').map(([t]) => t);
+  const excluded = [...tagFilterState].filter(([, s]) => s === 'exclude').map(([t]) => t);
+  const visible = reviews.filter(r => {
+    const tags = r.tags || [];
+    if (excluded.some(t => tags.includes(t))) return false;
+    return included.every(t => tags.includes(t));
+  });
 
   if (!reviews.length) {
     app.innerHTML = '<p class="state-msg">No reviews yet.</p>';
     return;
   }
   if (!visible.length) {
-    app.innerHTML = '<p class="state-msg">No reviews with this tag.</p>';
+    app.innerHTML = '<p class="state-msg">No reviews match these tag filters.</p>';
     return;
   }
 

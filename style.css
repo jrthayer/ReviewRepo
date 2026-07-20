@@ -102,7 +102,8 @@ header {
 }
 
 .tag-filter:hover { color: var(--text); border-color: var(--accent); }
-.tag-filter.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tag-filter.included { background: var(--green); border-color: var(--green); color: #0f2a1e; }
+.tag-filter.excluded { background: var(--red); border-color: var(--red); color: #fff; text-decoration: line-through; }
 
 /* ── Tag badges on cards ── */
 
