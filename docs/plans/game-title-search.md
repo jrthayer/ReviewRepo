@@ -1,5 +1,7 @@
 # Game-title search bar + tag-filters collapse toggle
 
+> Implemented in commit: [`f2310a5`](https://github.com/jrthayer/ReviewRepo/commit/f2310a5) — one small deviation from the plan below: no `tagFiltersOpen` JS variable was added, since nothing else needs to read that state. The hamburger click handler just toggles the `collapsed` class on `#tag-filters` directly — the DOM class is the single source of truth.
+
 ## Context
 
 The public site (`index.html`/`app.js`) just got a tag-name search box (filters which tag pills show) plus multi-select include/exclude tag filtering. This adds a second, separate search bar *above* the tag filter section that filters the review list itself by game title, with a hamburger button at the end of that same bar to collapse/expand the whole tag filter section (freeing up vertical space once you've set your tag filters and don't need to keep adjusting them).
