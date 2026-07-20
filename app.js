@@ -126,9 +126,28 @@ window.addEventListener('scroll', trimScrollSpacer, { passive: true });
 function reRenderPreservingCardPosition(cardId, mutate) {
   const oldScrollY = window.scrollY;
   const viewportHeight = window.innerHeight;
-  const before = document.querySelector(`.card[data-id="${CSS.escape(cardId)}"]`)?.getBoundingClientRect().top;
-  // Whether the card's own top edge was still on-screen (as opposed to
-  // scrolled past, e.g. while reading deep into a long expanded body).
+
+  // When a *different* card is currently expanded and about to
+  // auto-collapse as a side effect of this click (only one card can be
+  // expanded at a time), anchor on whichever of the two cards comes first
+  // in the list, not always the one that was already expanded. A card's
+  // own top position never moves regardless of whether it's the one
+  // collapsing or the one expanding — only content below it shifts — so
+  // the earlier card is always a small, reliable anchor. Anchoring on the
+  // later one instead would require scrolling further down to hold it in
+  // place whenever the earlier (clicked) card grows, pushing the card you
+  // just clicked to see further out of view above the viewport.
+  const otherCardWasExpanded = expandedId !== null && expandedId !== cardId;
+  let anchorId = cardId;
+  if (otherCardWasExpanded) {
+    const clickedIndex = reviews.findIndex(r => r.id === cardId);
+    const otherIndex = reviews.findIndex(r => r.id === expandedId);
+    anchorId = otherIndex < clickedIndex ? expandedId : cardId;
+  }
+
+  const before = document.querySelector(`.card[data-id="${CSS.escape(anchorId)}"]`)?.getBoundingClientRect().top;
+  // Whether the anchor card's own top edge was still on-screen (as opposed
+  // to scrolled past, e.g. while reading deep into a long expanded body).
   const topWasInView = before != null && before >= 0;
 
   // Oversize the spacer up front purely so this mutation can't shrink the
@@ -142,23 +161,23 @@ function reRenderPreservingCardPosition(cardId, mutate) {
   mutate();
   render();
 
-  const afterCard = document.querySelector(`.card[data-id="${CSS.escape(cardId)}"]`);
+  const afterAnchor = document.querySelector(`.card[data-id="${CSS.escape(anchorId)}"]`);
   let targetScrollY = oldScrollY;
-  if (afterCard) {
+  if (afterAnchor) {
     if (topWasInView) {
-      targetScrollY = oldScrollY + (afterCard.getBoundingClientRect().top - before);
+      targetScrollY = oldScrollY + (afterAnchor.getBoundingClientRect().top - before);
     } else {
-      // The card's top had already scrolled out of view (you were reading
-      // deep into its body when it collapsed/changed) — there's no pixel
-      // offset left to restore, since the content you were looking at is
-      // gone. Bring the card's new, much shorter top back into view instead
+      // The anchor's top had already scrolled out of view (you were
+      // reading deep into its body when it collapsed/changed) — there's no
+      // pixel offset left to restore, since the content you were looking
+      // at is gone. Bring its new, much shorter top back into view instead
       // of leaving scrollY where it was, which would otherwise strand the
-      // viewport on whatever unrelated content shifted into that same spot.
-      // Its own margin-top (see .card/.card.expanded in style.css) is left
-      // visible above it rather than scrolled past — flush against the
-      // viewport edge looks cramped.
-      const marginTop = parseFloat(getComputedStyle(afterCard).marginTop) || 0;
-      targetScrollY = oldScrollY + (afterCard.getBoundingClientRect().top - marginTop);
+      // viewport on whatever unrelated content shifted into that same
+      // spot. Its own margin-top (see .card/.card.expanded in style.css)
+      // is left visible above it rather than scrolled past — flush against
+      // the viewport edge looks cramped.
+      const marginTop = parseFloat(getComputedStyle(afterAnchor).marginTop) || 0;
+      targetScrollY = oldScrollY + (afterAnchor.getBoundingClientRect().top - marginTop);
     }
   }
   targetScrollY = Math.max(0, targetScrollY);
