@@ -83,11 +83,40 @@ header {
 #tag-filters {
   max-width: 860px;
   margin: 1.5rem auto 0;
-  padding: 0 1rem;
+  padding: 0 1rem 1rem;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+#tag-filters-top {
+  display: flex;
+}
+
+#tag-search {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+#tag-search::placeholder { color: var(--muted); }
+#tag-search:focus { outline: none; border-color: var(--accent); }
+
+#tag-filter-groups {
+  display: flex;
+  flex-direction: column;
   gap: 0.5rem;
 }
+
+#tag-filters-bottom {
+  display: flex;
+}
+
+.tag-filter-empty { color: var(--muted); font-size: 0.85rem; }
 
 .tag-filter {
   background: var(--surface);
@@ -175,15 +204,6 @@ header {
   color: var(--muted);
   opacity: 0.75;
 }
-
-/* The tag filter bar keeps its groups side-by-side on one row (divided by a
-   rule) rather than stacked, since it's a compact toolbar, not a tag list. */
-#tag-filters .tag-group {
-  padding-right: 0.5rem;
-  border-right: 1px solid var(--border);
-}
-
-#tag-filters .tag-group:last-child { border-right: none; padding-right: 0; }
 
 /* ── Cards ── */
 

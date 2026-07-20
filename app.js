@@ -6,6 +6,9 @@ let expandedId = null;
 // have every 'include' tag (AND) and none of the 'exclude' tags, matching
 // Steam's own tag-filter behavior.
 let tagFilterState = new Map();
+// Narrows which tag pills renderTagFilterGroups() shows; doesn't affect
+// which reviews are visible (that's tagFilterState above).
+let tagSearchQuery = '';
 let expandedBodyTab = 'steam';
 let expandedSubTab = 0;
 let showAllTags = false;
@@ -66,27 +69,56 @@ function allTagNamesSorted() {
 
 function renderTagFilters() {
   const el = document.getElementById('tag-filters');
-  const names = allTagNamesSorted();
-  if (!names.length) { el.innerHTML = ''; return; }
+  if (!allTagNamesSorted().length) { el.innerHTML = ''; return; }
 
-  const groups = groupTagNames(names, tagRegistry);
+  // The search input + Clear button are built once and never rebuilt by
+  // subsequent renders (e.g. from an unrelated card click) — only
+  // renderTagFilterGroups()'s own container gets replaced, so typing in the
+  // search box never loses focus or cursor position mid-keystroke.
+  if (!document.getElementById('tag-filters-top')) {
+    el.innerHTML = `
+      <div id="tag-filters-top">
+        <input type="text" id="tag-search" placeholder="Search tags..." autocomplete="off">
+      </div>
+      <div id="tag-filter-groups"></div>
+      <div id="tag-filters-bottom">
+        <button class="tag-filter" id="tag-filter-clear">Clear</button>
+      </div>
+    `;
+    document.getElementById('tag-search').addEventListener('input', e => {
+      tagSearchQuery = e.target.value;
+      renderTagFilterGroups();
+    });
+    document.getElementById('tag-filter-clear').addEventListener('click', () => {
+      tagFilterState.clear();
+      render();
+    });
+  }
+
+  renderTagFilterGroups();
+}
+
+function renderTagFilterGroups() {
+  const el = document.getElementById('tag-filter-groups');
+  const names = allTagNamesSorted();
+  const query = tagSearchQuery.trim().toLowerCase();
+  const matches = query ? names.filter(n => n.toLowerCase().includes(query)) : names;
+
+  if (!matches.length) {
+    el.innerHTML = `<p class="tag-filter-empty">No matching tags.</p>`;
+    return;
+  }
+
+  const groups = groupTagNames(matches, tagRegistry);
   const filterBtn = name => {
     const state = tagFilterState.get(name);
     const cls = state ? ` ${state}d` : '';
     return `<button class="tag-filter${cls}" data-tag="${escHtml(name)}">${escHtml(name)}</button>`;
   };
 
-  el.innerHTML = [
-    `<button class="tag-filter" id="tag-filter-clear">Clear</button>`,
-    ...groups.map(g => g.category
-      ? `<div class="tag-group"><span class="tag-group-label">${escHtml(g.category)}</span>${g.entries.map(e => filterBtn(e.name)).join('')}</div>`
-      : g.entries.map(e => filterBtn(e.name)).join('')),
-  ].join('');
-
-  document.getElementById('tag-filter-clear').addEventListener('click', () => {
-    tagFilterState.clear();
-    render();
-  });
+  el.innerHTML = groups.map(g => `<div class="tag-group">${
+    g.category ? `<span class="tag-group-label">${escHtml(g.category)}</span>` : ''
+  }${g.entries.map(e => filterBtn(e.name)).join('')}</div>`).join('');
 
   el.querySelectorAll('.tag-filter[data-tag]').forEach(btn => {
     btn.addEventListener('click', () => {
