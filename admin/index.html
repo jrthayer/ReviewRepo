@@ -142,13 +142,15 @@
     button.sm { padding: 0.2rem 0.55rem; font-size: 0.75rem; }
 
     /* ── Review list ── */
-    #existing-reviews {
-      background: var(--panel);
-      border: 1px solid var(--border);
+    #existing-reviews, #local-reviews {
       border-radius: 6px;
       margin-bottom: 1rem;
       overflow: hidden;
     }
+    #existing-reviews { background: var(--panel); border: 1px solid var(--border); }
+    /* Same amber treatment as #local-draft-banner/#local-draft-bottom-banner —
+       all three mean the same thing: local changes not yet pushed. */
+    #local-reviews { background: rgba(233, 196, 106, 0.12); border: 1px solid var(--amber); }
     .panel-hdr {
       display: flex; justify-content: space-between; align-items: center;
       padding: 0.5rem 0.75rem;
@@ -156,9 +158,15 @@
       border-bottom: 1px solid var(--border);
       cursor: pointer; user-select: none;
     }
+    #local-reviews .panel-hdr { background: rgba(233, 196, 106, 0.12); border-bottom: 1px solid var(--amber); }
     .panel-hdr strong { font-size: 0.82rem; }
-    #review-list { padding: 0.35rem; }
-    #review-list.collapsed { display: none; }
+    .local-reviews-note {
+      margin: 0.35rem 0 0; padding: 0.4rem 0.6rem 0;
+      border-top: 1px solid rgba(233, 196, 106, 0.35);
+      color: var(--amber);
+    }
+    #review-list, #local-review-list { padding: 0.35rem; }
+    #review-list.collapsed, #local-review-list.collapsed { display: none; }
     .r-item button {
       background: none; color: var(--text); padding: 0.3rem 0.55rem;
       width: 100%; text-align: left; border-radius: 4px;
@@ -303,7 +311,6 @@
     .status { font-size: 0.78rem; }
     .status.ok { color: var(--green); }
     .dirty-indicator-text { font-size: 0.78rem; font-weight: 600; color: var(--amber); }
-    #local-draft-flag { font-size: 0.95rem; cursor: default; }
     .local-draft-warn { color: var(--amber); margin-left: 0.35rem; font-size: 0.8rem; }
 
     #bbcode-warnings { font-size: 0.78rem; color: var(--amber); min-height: 1.1em; margin-top: 0.3rem; }
@@ -314,7 +321,6 @@
       border-radius: 6px; padding: 0.5rem 0.7rem; margin-bottom: 0.75rem;
       font-size: 0.82rem;
     }
-    #local-draft-banner button { padding: 0.25rem 0.5rem !important; min-width: auto !important; }
 
     #import-panel { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
     #import-panel textarea { min-height: 280px; font-size: 0.8rem; }
@@ -571,6 +577,35 @@
     }
     #readonly-banner.visible { display: flex; }
 
+    /* Same semi-transparent amber treatment as #local-reviews/.local-reviews-note
+       — a border-top stands in for the solid-background contrast #readonly-banner
+       uses, since the background alone isn't enough to read as a distinct bar
+       once it's this translucent.
+       Unlike #error-banner/#readonly-banner (position: fixed, overlaying the
+       viewport), this one is a real flex child of body — flex-shrink: 0, same
+       as header — so #workspace's available height shrinks to make room for
+       it instead of it floating on top of whatever's scrolled to the bottom
+       of #left-panel/#right-panel. */
+    #local-draft-bottom-banner {
+      flex-shrink: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      background: rgba(233, 196, 106, 0.12);
+      border-top: 1px solid var(--amber);
+      color: var(--amber);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+    }
+    #local-draft-bottom-banner.visible { display: flex; }
+    .local-draft-bottom-banner-btn {
+      background: none; color: var(--amber); border: 1px solid var(--amber) !important;
+      padding: 0.2rem 0.6rem !important; min-width: auto !important; font-size: 0.78rem;
+    }
+    .local-draft-bottom-banner-btn:hover { background: rgba(233, 196, 106, 0.2); }
+
     @media (max-width: 840px) {
       body { overflow: auto; }
       #workspace { grid-template-columns: 1fr; height: auto; overflow: visible; }
@@ -630,14 +665,6 @@
   <!-- ── Left: form ── -->
   <div id="left-panel">
 
-    <div id="steam-search-wrap">
-      <label>Import from Steam Library
-        <input id="game-search" type="text" placeholder="Type to search your library..."
-               oninput="filterGames()" onfocus="filterGames()" autocomplete="off">
-      </label>
-      <div id="game-results"></div>
-    </div>
-
     <div id="existing-reviews">
       <div class="panel-hdr" onclick="toggleReviewListSection()" title="Show/hide review list">
         <span class="section-toggle-label">
@@ -651,6 +678,27 @@
       </div>
     </div>
 
+    <div id="local-reviews">
+      <div class="panel-hdr" onclick="toggleLocalReviewsSection()" title="Show/hide local reviews">
+        <span class="section-toggle-label">
+          <strong>Local Reviews</strong>
+          <span class="chevron" id="local-review-list-chevron">&#9660;</span>
+        </span>
+        <button class="sm secondary" id="save-all-btn" style="display:none" onclick="event.stopPropagation(); saveAllLocalDraftsToGitHub()" title="Push every review that currently has a local draft to GitHub, in one commit">Save All to GitHub</button>
+      </div>
+      <div id="local-review-list">
+        <p class="hint" style="padding:0.5rem 0.6rem">No local-only changes.</p>
+      </div>
+    </div>
+
+    <div id="steam-search-wrap">
+      <label>Import from Steam Library
+        <input id="game-search" type="text" placeholder="Type to search your library..."
+               oninput="filterGames()" onfocus="filterGames()" autocomplete="off">
+      </label>
+      <div id="game-results"></div>
+    </div>
+
     <hr class="form-sep">
 
     <div class="section-toggle-row" onclick="toggleReviewSection()" title="Show/hide review details">
@@ -658,6 +706,7 @@
         <div id="form-heading">New Review</div>
         <span class="chevron" id="review-section-chevron">&#9660;</span>
       </span>
+      <button type="button" class="sm secondary" id="reimport-steam-btn" style="display:none" onclick="event.stopPropagation(); reimportFromSteam()" title="Re-fill Hours Played, Cover Image, and Release Date from your Steam library">Reimport from Steam</button>
     </div>
 
     <hr class="settings-sep">
@@ -666,7 +715,6 @@
 
       <div id="local-draft-banner" style="display:none">
         <span id="local-draft-text"></span>
-        <button type="button" class="secondary" onclick="discardLocalDraft()">Discard</button>
       </div>
 
       <label>Game Title
@@ -685,6 +733,10 @@
 
       <label>Hours Played
         <input id="f-hours" type="number" min="0" value="0" oninput="updatePreview()">
+      </label>
+
+      <label>Release Date (optional — autofilled from Steam)
+        <input id="f-release-date" type="date" oninput="updatePreview()">
       </label>
 
       <label>Date Posted
@@ -806,7 +858,6 @@
       <div id="save-row">
         <button type="button" id="save-btn" onclick="saveReview()">Save to GitHub</button>
         <button type="button" class="secondary" id="save-local-btn" onclick="saveLocalDraft()" title="Save this review to the browser only, without pushing to GitHub">Save Locally</button>
-        <span id="local-draft-flag" class="local-draft-warn" style="display:none" title="This review has a local draft that hasn't been pushed to GitHub yet">&#9888;</span>
         <button type="button" id="delete-btn" class="danger" style="display:none" onclick="startDeleteReview()">Delete</button>
         <span id="delete-confirm" style="display:none">
           Delete this review?
@@ -851,6 +902,12 @@
   <span>Read-only: showing default reviews. Configure GitHub above to edit and save your own.</span>
 </div>
 
+<div id="local-draft-bottom-banner">
+  <span>&#9888; This review has local changes that haven't been pushed to GitHub yet.</span>
+  <button type="button" class="local-draft-bottom-banner-btn" onclick="saveReview()">Save to GitHub</button>
+  <button type="button" class="local-draft-bottom-banner-btn" onclick="discardLocalDraft()">Discard Changes</button>
+</div>
+
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
 let reviews          = [];
@@ -861,7 +918,6 @@ let currentTags      = [];
 let currentCoreTags  = []; // review-local subset of currentTags shown as badges on the card (renderCoreTags, shared.js) — NOT a global tag category, independent of tagCategories/tagRegistry; edited via the "Core Tags" drop line in renderTags() below
 let tagHlIndex       = -1;
 let savedFormState = null; // getForm() snapshot as of the last load/save — refreshFormSnapshot() sets it, getChangedFormFields() diffs the live form against it field by field
-let pendingLocalDraft = null; // { id, savedAt, data } surfaced by checkLocalDraft() — set while the draft's Discard banner is showing (and its data already applied to the form), null otherwise
 let steamBody        = '';
 let extraTabs        = []; // [{ id, name, content }]
 let activeReviewTab  = 'steam';
@@ -1234,18 +1290,62 @@ async function loadDefaultReviewList() {
   updatePreview();
 }
 
+// Any review with a pending local draft lives in the Local Reviews list
+// (renderLocalReviewsList) instead of here — this list is only ones with
+// nothing unsaved, so it no longer needs its own per-item warning icon.
 function renderList() {
   const el = document.getElementById('review-list');
+  const visible = reviews.filter(r => !hasLocalDraft(r.id));
 
-  if (!reviews.length) {
-    el.innerHTML = '<p class="hint" style="padding:0.5rem 0.6rem">No reviews yet.</p>';
+  if (!visible.length) {
+    el.innerHTML = `<p class="hint" style="padding:0.5rem 0.6rem">${reviews.length ? 'All reviews have local changes — see Local Reviews below.' : 'No reviews yet.'}</p>`;
+  } else {
+    el.innerHTML = visible.map(r => `
+      <div class="r-item ${editingId === r.id ? 'active' : ''}">
+        <button onclick="loadReview('${r.id}')">${escHtml(r.title)}</button>
+      </div>`).join('');
+  }
+
+  renderLocalReviewsList();
+}
+
+// Every review with a pending local draft — whether it also exists on
+// GitHub or was never pushed at all (a brand-new review that only exists
+// locally) — lives here instead of the main Reviews list, so "has unsaved
+// local changes" is always one distinct place to look, not a warning icon
+// mixed into the full list.
+function renderLocalReviewsList() {
+  const el = document.getElementById('local-review-list');
+  const entries = getLocalDraftEntries().sort((a, b) => a.data.title.localeCompare(b.data.title));
+
+  document.getElementById('save-all-btn').style.display = entries.length ? 'inline-block' : 'none';
+
+  if (!entries.length) {
+    el.innerHTML = '<p class="hint" style="padding:0.5rem 0.6rem">No local-only changes.</p>';
     return;
   }
 
-  el.innerHTML = reviews.map(r => `
-    <div class="r-item ${editingId === r.id ? 'active' : ''}">
-      <button onclick="loadReview('${r.id}')">${escHtml(r.title)}${hasLocalDraft(r.id) ? ' <span class="local-draft-warn" title="This review has a local draft that hasn\'t been pushed to GitHub yet">&#9888;</span>' : ''}</button>
-    </div>`).join('');
+  el.innerHTML = entries.map(d => `
+    <div class="r-item ${editingId === d.data.id ? 'active' : ''}">
+      <button onclick="loadLocalDraftEntry('${d.data.id}', '${escHtml(d.data.title).replace(/'/g, "\\'")}')">${escHtml(d.data.title) || '(untitled)'} <span class="local-draft-warn" title="Not yet pushed to GitHub">&#9888;</span></button>
+    </div>`).join('') + `
+    <p class="hint local-reviews-note">These reviews are saved to this computer only — they still need to be saved to GitHub.</p>`;
+}
+
+// A Local Reviews entry may or may not already exist on GitHub — loadReview()
+// only handles the former (it looks the id up in `reviews`). A brand-new,
+// never-pushed draft needs its own path: start a new review and retype its
+// title, which reconstructs the same id via syncId() and re-triggers the
+// same checkLocalDraft() auto-apply loadReview() would otherwise have done.
+function loadLocalDraftEntry(id, title) {
+  if (reviews.some(r => r.id === id)) {
+    loadReview(id);
+  } else {
+    newReview();
+    set('f-title', title);
+    syncId();
+    updatePreview();
+  }
 }
 
 // ── Form actions ──────────────────────────────────────────────────────────────
@@ -1260,6 +1360,7 @@ function loadReview(id) {
   document.getElementById('form-heading').textContent = 'Edit Review';
   document.getElementById('delete-btn').style.display = 'inline-block';
   document.getElementById('delete-confirm').style.display = 'none';
+  document.getElementById('reimport-steam-btn').style.display = 'inline-block';
   renderList();
   updatePreview();
   checkLocalDraft(id);
@@ -1274,6 +1375,7 @@ function newReview() {
   document.getElementById('form-heading').textContent = 'New Review';
   document.getElementById('delete-btn').style.display = 'none';
   document.getElementById('delete-confirm').style.display = 'none';
+  document.getElementById('reimport-steam-btn').style.display = 'none';
   setSt('save-status', '', false);
   renderList();
   updatePreview();
@@ -1324,6 +1426,7 @@ async function saveReview() {
     updateDirtyIndicator();
     document.getElementById('form-heading').textContent = 'Edit Review';
     document.getElementById('delete-btn').style.display = 'inline-block';
+    document.getElementById('reimport-steam-btn').style.display = 'inline-block';
     renderList();
     removeLocalDraft(data.id);
     hideLocalDraftBanner();
@@ -1335,25 +1438,126 @@ async function saveReview() {
   }
 }
 
+// Pushes every review that currently has a local draft in one atomic commit
+// (via ghCommitFiles, same mechanism saveReview() uses for a single review's
+// tagsDirty bundle) rather than one commit per review. Drafts are applied
+// oldest-savedAt-first, so if more than one happens to carry a pending
+// tag-category snapshot (see writeLocalDraft), the most recently-saved one's
+// snapshot wins — same "whichever you touch last wins" precedence a normal
+// single-review save already has, just made explicit here since several are
+// being resolved at once instead of one at a time.
+async function saveAllLocalDraftsToGitHub() {
+  const { owner, repo, token } = getCfg();
+  if (!owner || !repo || !token) { setSt('save-status', 'Configure GitHub settings first.', true); return; }
+
+  const drafts = getLocalDraftEntries().sort((a, b) => a.savedAt - b.savedAt);
+  if (!drafts.length) return;
+
+  const btn = document.getElementById('save-all-btn');
+  btn.disabled = true;
+  setSt('save-status', `Saving ${drafts.length} review(s)...`, false);
+  try {
+    const { reviews: latest, sha } = await fetchFile();
+    let pendingTagCategories = null;
+    let pendingTagRegistry = null;
+
+    drafts.forEach(d => {
+      const idx = latest.findIndex(r => r.id === d.data.id);
+      if (idx >= 0) latest[idx] = d.data; else latest.push(d.data);
+      if (d.tagCategories && d.tagRegistry) {
+        pendingTagCategories = d.tagCategories;
+        pendingTagRegistry = d.tagRegistry;
+      }
+    });
+
+    const message = `Save ${drafts.length} local review${drafts.length === 1 ? '' : 's'} to GitHub`;
+
+    if (pendingTagCategories) {
+      const { blobShas } = await ghCommitFiles(
+        [
+          { path: 'data/reviews.json', data: latest },
+          { path: 'data/tag-categories.json', data: pendingTagCategories },
+          { path: 'data/tags.json', data: pendingTagRegistry },
+        ],
+        `${message} (+ tag changes)`
+      );
+      fileSha = blobShas[0];
+      tagCategories = pendingTagCategories.map(c => ({ ...c }));
+      tagRegistry = pendingTagRegistry.map(t => ({ ...t }));
+      savedTagCategories = tagCategories.map(c => ({ ...c }));
+      savedTagRegistry = tagRegistry.map(t => ({ ...t }));
+      cacheTagCategories(tagCategories);
+      cacheTagRegistry(tagRegistry);
+      clearTagsDirty();
+      renderTags();
+      renderManageTagsDropdown();
+    } else {
+      fileSha = sha;
+      await pushFile(latest, message);
+    }
+
+    reviews = latest;
+    cacheReviews(reviews);
+    drafts.forEach(d => removeLocalDraft(d.data.id));
+
+    // If the review currently open in the editor was one of the ones just
+    // pushed, refresh the form so it reflects the new saved state instead of
+    // still showing "unsaved" or a stale local-draft banner.
+    if (editingId && drafts.some(d => d.data.id === editingId)) {
+      const updated = reviews.find(r => r.id === editingId);
+      if (updated) {
+        setForm(updated);
+        refreshFormSnapshot();
+        updateDirtyIndicator();
+      }
+      hideLocalDraftBanner();
+    }
+
+    renderList();
+    updatePreview();
+    setSt('save-status', `Saved ${drafts.length} review(s) to GitHub!`, false);
+  } catch (e) {
+    setSt('save-status', e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ── Local drafts (browser-only save, no GitHub push) ───────────────────────────
 // Deliberately simple: a draft is keyed by review id and, whenever one exists
 // for the review being loaded, wins by default — the form (and every preview
 // built from it) shows the draft's content immediately, no merging with
-// whatever's actually on GitHub. The banner stays up the whole time a draft is
-// showing; its only action is Discard, which drops the draft and reverts the
-// form to the real GitHub version (or blank, for a draft of a review that was
-// never pushed at all).
+// whatever's actually on GitHub. The top-of-form banner (checkLocalDraft) is
+// purely informational (when the draft was saved); Save to GitHub and
+// Discard Changes both live on the persistent bottom banner instead
+// (updateLocalDraftFlag), since that one stays up for as long as the local
+// change does, not just right after loading.
 function hasLocalDraft(id) {
   return !!id && !!localStorage.getItem(`${LOCAL_DRAFT_PREFIX}${id}`);
 }
 
-// Persistent "this review has a local draft" symbol next to the save buttons —
-// redundant with the banner while a draft is showing, but also covers drafts
-// for OTHER reviews (surfaced via renderList()'s per-row warning instead).
-// Reflects whatever id is in the form right now, so it stays in sync across
+// Every parsed local draft currently in storage — shared by
+// renderLocalReviewsList() (the "Local Reviews" panel) and
+// saveAllLocalDraftsToGitHub(), so both agree on exactly what counts as a
+// pending local draft. Malformed entries are silently skipped rather than
+// thrown, consistent with checkLocalDraft()'s own try/catch below.
+function getLocalDraftEntries() {
+  return Object.keys(localStorage)
+    .filter(k => k.startsWith(LOCAL_DRAFT_PREFIX))
+    .map(k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } })
+    .filter(Boolean);
+}
+
+// Persistent bottom-of-screen banner for "this review has local changes" —
+// this is the actual Save to GitHub / Discard Changes action point now, not
+// just an indicator, which is why it has no dismiss button of its own
+// (unlike #error-banner/#readonly-banner): closing it would hide the only
+// way back to those two actions. The top-of-form banner (checkLocalDraft)
+// is purely informational (when the draft was saved) by comparison. Reflects
+// whatever id is in the form right now, so it stays in sync across
 // discard/save.
 function updateLocalDraftFlag() {
-  document.getElementById('local-draft-flag').style.display = hasLocalDraft(v('f-id')) ? '' : 'none';
+  document.getElementById('local-draft-bottom-banner').classList.toggle('visible', hasLocalDraft(v('f-id')));
 }
 
 // Bundles the pending tagCategories/tagRegistry edit (if any) in with the
@@ -1408,7 +1612,6 @@ function checkLocalDraft(id) {
   if (!raw) { hideLocalDraftBanner(); return; }
   let draft;
   try { draft = JSON.parse(raw); } catch { removeLocalDraft(id); hideLocalDraftBanner(); return; }
-  pendingLocalDraft = { id, ...draft };
   setForm(draft.data);
   if (draft.tagCategories && draft.tagRegistry) {
     tagCategories = draft.tagCategories.map(c => ({ ...c }));
@@ -1426,14 +1629,18 @@ function checkLocalDraft(id) {
 }
 
 function hideLocalDraftBanner() {
-  pendingLocalDraft = null;
   document.getElementById('local-draft-banner').style.display = 'none';
   updateLocalDraftFlag();
 }
 
+// Called from the bottom banner's Discard Changes button, which can still be
+// showing long after the top banner's "just loaded" moment has passed (e.g.
+// after an intervening Save Locally) — so this derives what to discard from
+// the form's own id (same source of truth updateLocalDraftFlag() uses)
+// rather than requiring a "pending" draft captured at load time.
 function discardLocalDraft() {
-  if (!pendingLocalDraft) return;
-  const id = pendingLocalDraft.id;
+  const id = v('f-id');
+  if (!id || !hasLocalDraft(id)) return;
   removeLocalDraft(id);
   const original = reviews.find(r => r.id === id);
   if (original) setForm(original); else clearForm();
@@ -1487,6 +1694,7 @@ function getForm() {
     summary:     v('f-summary'),
     coverImage:  v('f-cover'),
     hoursPlayed: Number(v('f-hours')) || 0,
+    releaseDate: v('f-release-date'),
     datePosted:  v('f-date'),
     body:        syncActiveTabContent().steamBody,
     tabs:        extraTabs.map(({ id, name, content }) => ({ id, name, content })),
@@ -1501,6 +1709,7 @@ function setForm(r) {
   set('f-summary', r.summary     || '');
   set('f-cover',   r.coverImage  || '');
   set('f-hours',   r.hoursPlayed ?? 0);
+  set('f-release-date', r.releaseDate || '');
   set('f-date',    r.datePosted  || '');
   steamBody = r.body || '';
   extraTabs = (r.tabs || []).map(t => ({ ...t }));
@@ -1518,7 +1727,7 @@ function setForm(r) {
 }
 
 function clearForm() {
-  ['f-title','f-id','f-summary','f-cover'].forEach(id => set(id, ''));
+  ['f-title','f-id','f-summary','f-cover','f-release-date'].forEach(id => set(id, ''));
   set('f-hours', '0');
   set('f-date', today());
   document.querySelector('input[name="recommended"][value="true"]').checked = true;
@@ -2759,6 +2968,7 @@ const FORM_FIELD_LABELS = {
   summary:     'Summary',
   coverImage:  'Cover Image',
   hoursPlayed: 'Hours Played',
+  releaseDate: 'Release Date',
   datePosted:  'Date Posted',
   tags:        'Tags',
   coreTags:    'Core Tags',
@@ -2946,6 +3156,12 @@ function toggleReviewListSection() {
   const list = document.getElementById('review-list');
   const collapsed = list.classList.toggle('collapsed');
   document.getElementById('review-list-chevron').innerHTML = collapsed ? '&#9650;' : '&#9660;';
+}
+
+function toggleLocalReviewsSection() {
+  const list = document.getElementById('local-review-list');
+  const collapsed = list.classList.toggle('collapsed');
+  document.getElementById('local-review-list-chevron').innerHTML = collapsed ? '&#9650;' : '&#9660;';
 }
 
 function toggleManageTagsDropdown(e) {
@@ -3482,12 +3698,75 @@ function selectGame(appid) {
     set('f-cover', `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`);
     syncId();
     updatePreview();
+    fetchSteamReleaseDate(appid, game.name);
   }
 
   set('game-search', '');
   document.getElementById('game-results').className = '';
   document.getElementById('game-results').innerHTML = '';
   document.getElementById('f-summary').focus();
+}
+
+// "Reimport from Steam" (Edit Review header row, existing reviews only) —
+// matches the currently-open review to a Steam library entry by title, same
+// matching selectGame() uses, and re-fills Hours Played, Cover Image, and
+// Release Date in place, without touching title/id/summary/body/tags.
+// Useful for backfilling Release Date on a review written before that field
+// existed, or refreshing Hours Played after playing more since.
+function reimportFromSteam() {
+  if (!editingId) return;
+  if (!steamLibrary.length) { setSt('save-status', 'Load your Steam library in Settings first.', true); return; }
+
+  const title = v('f-title').trim().toLowerCase();
+  const game = steamLibrary.find(g => g.name.trim().toLowerCase() === title);
+  if (!game) { setSt('save-status', `No match for "${v('f-title')}" in your Steam library.`, true); return; }
+
+  set('f-hours', Math.round(game.playtime_forever / 60));
+  set('f-cover', `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.appid}/header.jpg`);
+  updatePreview();
+  fetchSteamReleaseDate(game.appid, v('f-title'));
+  setSt('save-status', 'Re-imported from Steam.', false);
+}
+
+// Steam's Store API returns release_date.date as "12 Jan, 2023" (day month,
+// year) — converts that to the yyyy-mm-dd f-release-date (type="date") and
+// f-date (Date Posted) both need. Returns null (rather than throwing) for
+// anything that doesn't match, e.g. a locale variant or "Coming soon" text
+// that slipped past the coming_soon check — an unparsed date is better left
+// blank than silently wrong.
+const STEAM_MONTHS = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
+function parseSteamReleaseDate(str) {
+  const m = /^(\d{1,2})\s+(\w{3}),?\s+(\d{4})$/.exec((str || '').trim());
+  const month = m && STEAM_MONTHS[m[2]];
+  if (!month) return null;
+  return `${m[3]}-${String(month).padStart(2, '0')}-${String(m[1]).padStart(2, '0')}`;
+}
+
+// Steam's Store API (unauthenticated, no key needed) — separate from the
+// IPlayerService/GetOwnedGames call loadSteamLibrary() already made, which
+// doesn't include release info. Fire-and-forget from selectGame() rather
+// than awaited, so it never delays the rest of the autofill; silently
+// no-ops on a network/proxy failure, an unreleased game (coming_soon), or a
+// date string parseSteamReleaseDate doesn't recognize — this is a
+// nice-to-have autofill, not something saving should ever depend on. Checks
+// the title is still what we expect before applying, in case the user's
+// already moved on to a different review by the time this resolves.
+async function fetchSteamReleaseDate(appid, expectedTitle) {
+  try {
+    const res = await fetch(PROXY(`https://store.steampowered.com/api/appdetails?appids=${appid}`));
+    if (!res.ok) return;
+    const data = await res.json();
+    const releaseDate = data[appid]?.data?.release_date;
+    if (!releaseDate || releaseDate.coming_soon || !releaseDate.date) return;
+    const parsed = parseSteamReleaseDate(releaseDate.date);
+    if (!parsed) return;
+    if (v('f-title') !== expectedTitle) return;
+    set('f-release-date', parsed);
+    updatePreview();
+  } catch {
+    // network error, proxy down, etc. — leave the field blank, same as if
+    // Steam simply had no release date on record.
+  }
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

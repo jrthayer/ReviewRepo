@@ -82,8 +82,15 @@ function escHtml(str) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// str is always a bare yyyy-mm-dd (every caller passes a type="date" input's
+// value — datePosted, releaseDate). Parsed as-is, that's UTC midnight per
+// spec, which toLocaleDateString then renders in the viewer's local
+// timezone — anyone west of UTC sees it roll back a day (e.g. "2007-08-21"
+// showing as "Aug 20, 2007"). Appending a time-of-day makes the same Date
+// constructor parse it as local midnight instead, which is what a bare date
+// (no timezone information) should mean here.
 function formatDate(str) {
-  return new Date(str).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  return new Date(`${str}T00:00:00`).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 function splitSubTabs(raw) {
@@ -256,7 +263,7 @@ function renderCard(r, opts = {}) {
           <h2><span class="card-title-text">${escHtml(r.title) || 'Untitled'}</span>${appId ? `<a class="steam-link" href="https://store.steampowered.com/app/${appId}/" target="_blank" rel="noopener noreferrer" title="View on Steam" onclick="event.stopPropagation()">${STEAM_ICON}</a>` : ''}</h2>
           <span class="badge ${r.recommended ? 'yes' : 'no'}">${r.recommended ? 'Recommended' : 'Not Recommended'}</span>
           <p class="summary">${escHtml(r.summary)}</p>
-          <div class="meta">${r.hoursPlayed} hrs &middot; ${r.datePosted ? formatDate(r.datePosted) : '—'}</div>
+          <div class="meta">${r.hoursPlayed} hrs${r.releaseDate ? ` &middot; Released ${formatDate(r.releaseDate)}` : ''} &middot; Reviewed ${r.datePosted ? formatDate(r.datePosted) : '—'}</div>
           ${renderCoreTags(r.coreTags, { canExpand: (r.tags?.length || 0) > (r.coreTags?.length || 0), expanded: showAllTags })}
         </div>
         <div class="card-chevron">${expanded ? '▲' : '▼'}</div>
