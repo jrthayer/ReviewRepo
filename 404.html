@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Game Reviews</title>
+  <script>
+    // GitHub Pages has no server-side rewrites, so a real page load of a
+    // path with no matching file (e.g. /review/<id> — a virtual route, not
+    // an actual file) lands here instead of failing outright. Redirect back
+    // to the real index.html carrying the original path in a query param;
+    // its own bootstrap script restores it via history.replaceState before
+    // the app reads the URL. See docs/fragile-solutions.md — in particular,
+    // pathSegmentsToKeep below has to match how many path segments this
+    // repo's Pages deployment is served under (1, for a project page at
+    // /ReviewRepo/) and needs updating if that ever changes.
+    var pathSegmentsToKeep = 1;
+    var l = window.location;
+    var segments = l.pathname.split('/');
+    var root = segments.slice(0, pathSegmentsToKeep + 1).join('/') + '/';
+    var rest = '/' + segments.slice(pathSegmentsToKeep + 1).join('/');
+    var extraSearch = l.search ? l.search.slice(1) + '&' : '';
+    l.replace(root + '?' + extraSearch + 'p=' + encodeURIComponent(rest) + l.hash);
+  </script>
+</head>
+<body></body>
+</html>

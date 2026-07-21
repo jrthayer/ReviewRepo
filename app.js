@@ -131,7 +131,13 @@ async function init() {
   // else visiting the real site sees these.
   reviews = applyLocalDrafts(reviews);
 
-  const requestedId = new URLSearchParams(location.search).get('review');
+  // Path-based (SITE_ROOT + 'review/<id>', see index.html's bootstrap
+  // script) is the real permalink format; ?review=<id> is only checked as a
+  // fallback for any old query-string links already out in the wild.
+  const pathMatch = /^review\/([^/]+)\/?$/.exec(location.pathname.slice(SITE_ROOT.length));
+  const requestedId = pathMatch
+    ? decodeURIComponent(pathMatch[1])
+    : new URLSearchParams(location.search).get('review');
   if (requestedId && reviews.some(r => r.id === requestedId)) {
     expandedId = requestedId;
   }
@@ -531,7 +537,11 @@ function render() {
     expanded: expandedId === r.id,
     activeTabId: expandedBodyTab,
     activeSubIndex: expandedSubTab,
-    permalinkHref: `?review=${r.id}`,
+    // Built from SITE_ROOT rather than a plain relative path so it's still
+    // correct when the current visible URL is itself already .../review/<id>
+    // (see index.html's bootstrap script) — a bare "review/xyz" would
+    // otherwise resolve as a sibling of the current review, not of the site root.
+    permalinkHref: `${SITE_ROOT}review/${encodeURIComponent(r.id)}`,
     tagRegistry,
     tagCategories,
     showAllTags: expandedId === r.id && showAllTags,

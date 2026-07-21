@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A static, no-build, no-dependency site for publishing personal game reviews, plus a single-file admin tool for authoring them. There is no `package.json`, no bundler, and no test suite — it's six flat files (`index.html`, `app.js`, `admin.html`, `shared.js`, `style.css`, `serve.ps1`) served as-is.
+A static, no-build, no-dependency site for publishing personal game reviews, plus a single-file admin tool for authoring them. There is no `package.json`, no bundler, and no test suite — it's a handful of flat files (`index.html`, `app.js`, `admin/index.html`, `shared.js`, `style.css`, `serve.ps1`, `404.html`) served as-is. Live on GitHub Pages as a **project page** at `https://jrthayer.github.io/ReviewRepo/` (i.e. under a `/ReviewRepo/` subpath, not a custom domain or root site) — that base-path assumption shows up in a few places, see `docs/fragile-solutions.md`.
 
 ## Workflow: propose before editing
 
@@ -17,15 +17,23 @@ powershell -ExecutionPolicy Bypass -File .\serve.ps1        # serves the repo ro
 powershell -ExecutionPolicy Bypass -File .\serve.ps1 -Port 3000
 ```
 
-`serve.ps1` is a minimal `System.Net.HttpListener`-based static file server (no Node/npm involved). There is no build, lint, or test command — edit the HTML/JS/CSS files directly and reload the browser.
+`serve.ps1` is a minimal `System.Net.HttpListener`-based static file server (no Node/npm involved) — it also replicates enough of GitHub Pages' routing to make the clean URLs work locally (directory-index for a path ending in `/`, `<path>.html`/`<path>/index.html` fallback for an extension-less path, and a direct `/review/<id>` fallback), though it's a hand-rolled approximation, not identical — see `docs/fragile-solutions.md`. There is no build, lint, or test command — edit the HTML/JS/CSS files directly and reload the browser.
 
 ## Architecture
 
 Two front ends share one data model:
 
 - **`index.html` + `app.js`** — the public site. Renders review cards, tag filtering, expandable card detail with nested review tabs/sub-tabs.
-- **`admin.html`** — a single file with all its CSS and JS inline (no separate admin.js). Used to author/edit/delete reviews and push them to GitHub, plus preview exactly how a review will look both as a site card and as a Steam review.
-- **`shared.js`** — constants and helpers used identically by both of the above (`escHtml`, `formatDate`, `steamAppId`, `splitSubTabs`, `renderBBCode`, `renderCard`, `STEAM_ICON`, `SITE_LINK_TEXT`). **Anything both files need must live here, not be duplicated in each** — this file used to not exist and the same logic/text drifted out of sync between the two UIs. `admin.html` loads it via a normal blocking `<script src="shared.js">` in `<head>`; `index.html` loads it dynamically alongside `app.js` (see below) with `.async = false` on both loader tags, in that order, so `shared.js` is guaranteed to finish before `app.js` runs even though both are non-parser-inserted (and thus otherwise unordered) script tags.
+- **`admin.html`** (physically at `admin/index.html`, so it serves at the clean URL `/admin/` — see "Clean URLs" below) — a single file with all its CSS and JS inline (no separate admin.js). Used to author/edit/delete reviews and push them to GitHub, plus preview exactly how a review will look both as a site card and as a Steam review. Still referred to as `admin.html` throughout this doc and in code comments, as shorthand for "the admin tool" — its one-level-deeper path only actually matters for its own relative asset references (`../shared.js`, `../style.css`) and its "← View site" link (`../`).
+- **`shared.js`** — constants and helpers used identically by both of the above (`escHtml`, `formatDate`, `steamAppId`, `splitSubTabs`, `renderBBCode`, `renderCard`, `STEAM_ICON`, `SITE_LINK_TEXT`). **Anything both files need must live here, not be duplicated in each** — this file used to not exist and the same logic/text drifted out of sync between the two UIs. `admin.html` loads it via a normal blocking `<script src="../shared.js">` in `<head>`; `index.html` loads it dynamically alongside `app.js` (see below) with `.async = false` on both loader tags, in that order, so `shared.js` is guaranteed to finish before `app.js` runs even though both are non-parser-inserted (and thus otherwise unordered) script tags.
+
+### Clean URLs (`SITE_ROOT`, `404.html`, `serve.ps1`)
+
+Neither `.html` extensions nor `?review=` query strings show up in the address bar. `admin.html` lives at `admin/index.html` so `/admin/` resolves it directly (standard static-host directory-index behavior — both GitHub Pages and `serve.ps1` serve a directory path's `index.html`). A review's permalink is a real path, `/review/<id>`, not a query string.
+
+That path is virtual — there's no actual file at `/review/<id>` — so `index.html` has a bootstrap script (top of `<head>`, before anything else loads) that computes `window.SITE_ROOT` (this deployment's base path: `/` locally, `/ReviewRepo/` on GitHub Pages) from the current URL. Every other script builds links from `SITE_ROOT` rather than a plain relative path — necessary because the visible URL can be `.../review/<id>` even though the actual loaded document is `index.html` sitting at the real root, and a bare relative path would resolve against the wrong directory. On GitHub Pages (no server-side rewrites), a real load of `/review/<id>` is only reachable via `404.html`'s redirect trick (see `docs/fragile-solutions.md` for exactly how, and its one hardcoded assumption). Locally, `serve.ps1` just serves `index.html`'s content directly for that path — a real server doesn't need the trick.
+
+`docs/fragile-solutions.md` is the running list of workarounds like this one — deliberate, but fragile in a specific, documented way. Check it first if a link or page behaves strangely and the cause isn't obvious; add to it when you introduce a new one.
 
 ### No native browser dialogs in the admin UI
 
@@ -64,11 +72,11 @@ Two distinct, similarly-named tab systems:
 
 ### Admin preview mirrors the live site
 
-`admin.html`'s "Site Card Preview" panel (`renderSitePreview`) and the live site's card list (`render` in `app.js`) both build their card HTML from the single shared `renderCard(r, opts)` in `shared.js` — they no longer hand-duplicate the markup. Only the event-wiring on top differs (`app.js` wires up a list of cards sharing one global expand/tab state; `admin.html` wires up a single card that re-renders from the live form on every keystroke), so that part stays local to each file. `renderCard`'s `permalinkHref`/`disablePermalinkNav` options exist because the permalink genuinely needs different behavior per caller: the site uses a same-page relative `?review=` link, the admin preview uses an absolute `siteReviewUrl()` with navigation suppressed (it's a preview, not a real page). `#site-preview` reuses `style.css`'s actual `.card` rules unmodified by re-scoping the same CSS custom property names (`--bg`, `--surface`, `--accent`, etc.), since the admin UI's own dark theme uses different values for those variables.
+`admin.html`'s "Site Card Preview" panel (`renderSitePreview`) and the live site's card list (`render` in `app.js`) both build their card HTML from the single shared `renderCard(r, opts)` in `shared.js` — they no longer hand-duplicate the markup. Only the event-wiring on top differs (`app.js` wires up a list of cards sharing one global expand/tab state; `admin.html` wires up a single card that re-renders from the live form on every keystroke), so that part stays local to each file. `renderCard`'s `permalinkHref`/`disablePermalinkNav` options exist because the permalink genuinely needs different behavior per caller: the site builds a same-origin path from `SITE_ROOT` (see "Clean URLs" above), the admin preview uses an absolute `siteReviewUrl()` with navigation suppressed (it's a preview, not a real page). `#site-preview` reuses `style.css`'s actual `.card` rules unmodified by re-scoping the same CSS custom property names (`--bg`, `--surface`, `--accent`, etc.), since the admin UI's own dark theme uses different values for those variables.
 
 ### Permalinks between the site and Steam
 
-`?review=<id>` on `index.html` auto-expands and scrolls to that card on load (see `init()` in `app.js`). `admin.html`'s `siteReviewUrl(id)` builds that URL, and it's appended (using the shared `SITE_LINK_TEXT` copy) both to the site card itself (`.card-permalink`) and to the Steam-review text/preview — so a posted Steam review links back to the fuller write-up on the site, and the site card links to itself for sharing.
+`/review/<id>` (a real path, see "Clean URLs" above — not `?review=<id>`, which only still works as a fallback for old links) auto-expands and scrolls to that card on load (see `init()` in `app.js`). `admin.html`'s `siteReviewUrl(id)` builds that URL via plain relative resolution (`../review/<id>` against `location.href` — admin's own URL is never rewritten the way index.html's can be, so it doesn't need `SITE_ROOT`), and it's appended (using the shared `SITE_LINK_TEXT` copy) both to the site card itself (`.card-permalink`) and to the Steam-review text/preview — so a posted Steam review links back to the fuller write-up on the site, and the site card links to itself for sharing.
 
 ### Custom format blocks & saved tabs
 

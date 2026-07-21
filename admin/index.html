@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Review Admin</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="shared.js"></script>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../shared.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -583,7 +583,7 @@
 
 <header>
   <span>Review Admin</span>
-  <a href="index.html">← View site</a>
+  <a href="../">← View site</a>
 </header>
 
 <details id="settings">
@@ -3238,8 +3238,13 @@ function renderSitePreview(r) {
   });
 }
 
+// Relative up-then-in resolution (not an absolute path) — admin.html's own
+// URL is always exactly where it physically lives (admin/index.html, unlike
+// index.html's URL, which the review-permalink redirect trick can rewrite
+// to something deeper), so plain relative resolution against location.href
+// is safe here and needs no SITE_ROOT-style computation.
 function siteReviewUrl(id) {
-  return new URL(`index.html?review=${encodeURIComponent(id)}`, location.href).href;
+  return new URL(`../review/${encodeURIComponent(id)}`, location.href).href;
 }
 
 function renderSteamPreview(r) {

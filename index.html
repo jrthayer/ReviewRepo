@@ -5,16 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Game Reviews</title>
   <script>
+    // Recovers the real path after GitHub Pages' 404.html SPA-redirect
+    // trick (see 404.html and docs/fragile-solutions.md) and computes
+    // SITE_ROOT — this deployment's base path ('/' locally, '/ReviewRepo/'
+    // on GitHub Pages). Runs before anything else loads, since every
+    // relative asset/link below has to be built from SITE_ROOT rather than
+    // a plain relative path: once the visible URL is .../review/<id>, a
+    // bare relative path like "shared.js" would resolve against
+    // ".../review/" instead of the real root.
+    (function () {
+      function computeRoot(path) {
+        var m = /^(.*?\/)review\/[^/]+\/?$/.exec(path);
+        return m ? m[1] : path.replace(/[^/]*$/, '');
+      }
+      window.SITE_ROOT = computeRoot(location.pathname);
+
+      var params = new URLSearchParams(location.search);
+      var redirected = params.get('p');
+      if (redirected) {
+        params.delete('p');
+        var qs = params.toString();
+        var newPath = window.SITE_ROOT.slice(0, -1) + redirected;
+        history.replaceState(null, '', newPath + (qs ? '?' + qs : '') + location.hash);
+      }
+    })();
+
     const _v = Date.now();
     const _l = document.createElement('link');
-    _l.rel = 'stylesheet'; _l.href = 'style.css?v=' + _v;
+    _l.rel = 'stylesheet'; _l.href = SITE_ROOT + 'style.css?v=' + _v;
     document.head.appendChild(_l);
   </script>
 </head>
 <body>
   <header>
-    <a href="index.html" id="site-title">Game Reviews</a>
-    <a href="admin.html" id="admin-link" aria-label="Admin" title="Admin">⚙</a>
+    <a href="." id="site-title">Game Reviews</a>
+    <a href="admin/" id="admin-link" aria-label="Admin" title="Admin">⚙</a>
   </header>
   <div id="title-search-bar">
     <input type="text" id="title-search" placeholder="Search by game name..." autocomplete="off">
@@ -34,13 +59,19 @@
   <div id="tag-filters" class="collapsed"></div>
   <main id="app"></main>
   <script>
+    // Static hrefs above are a plain-relative fallback (correct only when
+    // the visible URL is exactly SITE_ROOT); these overrides make them
+    // correct from a .../review/<id> URL too.
+    document.getElementById('site-title').href = SITE_ROOT;
+    document.getElementById('admin-link').href = SITE_ROOT + 'admin/';
+
     const _sh = document.createElement('script');
-    _sh.src = 'shared.js?v=' + _v;
+    _sh.src = SITE_ROOT + 'shared.js?v=' + _v;
     _sh.async = false;
     document.body.appendChild(_sh);
 
     const _s = document.createElement('script');
-    _s.src = 'app.js?v=' + _v;
+    _s.src = SITE_ROOT + 'app.js?v=' + _v;
     _s.async = false;
     document.body.appendChild(_s);
   </script>
