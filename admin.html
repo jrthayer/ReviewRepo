@@ -1259,6 +1259,7 @@ function newReview() {
 async function saveReview() {
   const data = getForm();
   if (!data.title || !data.id) { setSt('save-status', 'Title and ID are required.', true); return; }
+  if (editingId === data.id && !tagsDirty && !isFormDirty(data)) { setSt('save-status', 'No changes to save.', false); return; }
   const { owner, repo, token } = getCfg();
   if (!owner || !repo || !token) { setSt('save-status', 'Configure GitHub settings first.', true); return; }
 
@@ -3117,12 +3118,7 @@ function copyForSteam() {
 // word processor's spelling/grammar checker) ──────────────────────────────────
 function serializeReviewForExport(r) {
   const lines = [
-    `Title: ${r.title || ''}`,
     `Summary: ${r.summary || ''}`,
-    `Recommended: ${r.recommended ? 'Yes' : 'No'}`,
-    `Hours Played: ${r.hoursPlayed ?? 0}`,
-    `Date Posted: ${r.datePosted || ''}`,
-    `Cover Image: ${r.coverImage || ''}`,
     `Tags: ${(r.tags || []).join(', ')}`,
     '',
     '=== Steam Review ===',
@@ -3188,16 +3184,7 @@ function confirmImportReview() {
   const steamSection = sections.find(s => /^steam review$/i.test(s.name));
   const tabSections  = sections.filter(s => s !== steamSection);
 
-  set('f-title', fields['title'] || '');
-  syncId();
   set('f-summary', fields['summary'] || '');
-  set('f-cover', fields['cover image'] || '');
-  set('f-hours', fields['hours played'] || '0');
-  set('f-date', fields['date posted'] || '');
-
-  const recommended = (fields['recommended'] || '').trim().toLowerCase() !== 'no';
-  const radio = document.querySelector(`input[name="recommended"][value="${recommended}"]`);
-  if (radio) radio.checked = true;
 
   currentTags = (fields['tags'] || '').split(',').map(t => t.trim()).filter(Boolean);
   renderTags();
