@@ -18,12 +18,20 @@
   </header>
   <div id="title-search-bar">
     <input type="text" id="title-search" placeholder="Search by game name..." autocomplete="off">
-    <button id="tag-filters-toggle" aria-label="Toggle tag filters" title="Show/hide tag filters">&#9776;</button>
+  </div>
+  <div id="recommend-filter-row">
+    <div id="sort-controls">
+      <span class="tag-group-label">Sort By</span>
+      <button class="tag-filter" id="playtime-sort-btn">Playtime?</button>
+      <button class="tag-filter" id="price-sort-btn">Price?</button>
+    </div>
+    <button class="tag-filter" id="recommend-filter-btn">Recommended?</button>
+    <div id="tags-toggle-controls">
+      <span class="tag-group-label">Tags</span>
+      <button id="tag-filters-toggle" aria-label="Toggle tag filters" title="Show/hide tag filters">&#9776;</button>
+    </div>
   </div>
   <div id="tag-filters" class="collapsed"></div>
-  <div id="recommend-filter-row">
-    <button class="tag-filter" id="recommend-filter-btn">Recommended?</button>
-  </div>
   <main id="app"></main>
   <script>
     const _sh = document.createElement('script');

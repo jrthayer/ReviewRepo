@@ -22,6 +22,12 @@ let titleSearchQuery = '';
 // below the tag filter section: undefined (neutral) -> 'include' (must be
 // recommended) -> 'exclude' (must be not recommended) -> neutral.
 let recommendedFilter;
+// Sort direction for the Playtime?/Price? toggles below Recommended? —
+// undefined (neutral, list keeps its natural/save order), 'asc', or 'desc'.
+// Mutually exclusive with each other (see wireSortButton): turning one on
+// resets the other to neutral, so at most one custom sort applies at a time.
+let playtimeSort;
+let priceSort;
 let expandedBodyTab = 'steam';
 let expandedSubTab = 0;
 let showAllTags = false;
@@ -30,6 +36,41 @@ let showAllTags = false;
 // undefined), shared by tag pills and the Recommended toggle.
 function cycleTriState(cur) {
   return cur === undefined ? 'include' : cur === 'include' ? 'exclude' : undefined;
+}
+
+// Same tri-state shape as cycleTriState, just with sort-direction labels
+// instead of include/exclude — kept separate so a sort field's value reads
+// as 'asc'/'desc' rather than the semantically-mismatched 'include'/'exclude'.
+// Starts at 'desc' (most playtime/priciest first) rather than 'asc', since
+// that's the more useful default first click for both Playtime and Price.
+function cycleSortState(cur) {
+  return cur === undefined ? 'desc' : cur === 'desc' ? 'asc' : undefined;
+}
+
+// A review's retail price, parsed from its own Monetization tag (e.g. "$20
+// Retail") rather than a dedicated field — there isn't one. Returns null
+// (not 0) when no such tag is present, e.g. a purely "episodic" review with
+// no retail tag at all, so sortByPrice can tell "no price" apart from "free."
+function reviewPrice(r) {
+  for (const t of r.tags || []) {
+    const m = /^\$(\d+(?:\.\d+)?)\s*retail$/i.exec(t.trim());
+    if (m) return Number(m[1]);
+  }
+  return null;
+}
+
+// Refreshes both sort buttons' text/active styling from the current
+// playtimeSort/priceSort — called after either one is clicked (rather than
+// each handler only touching its own button) so the mutual-exclusivity
+// reset is always reflected on screen, not just in state.
+function updateSortToggleButtons() {
+  const setLabel = (id, state, label) => {
+    const btn = document.getElementById(id);
+    btn.textContent = state === 'asc' ? `${label} ↑` : state === 'desc' ? `${label} ↓` : `${label}?`;
+    btn.classList.toggle('sort-active', !!state);
+  };
+  setLabel('playtime-sort-btn', playtimeSort, 'Playtime');
+  setLabel('price-sort-btn', priceSort, 'Price');
 }
 
 // Shared by every clickable tag pill (category rows and the pinned "Filter
@@ -126,6 +167,20 @@ async function init() {
     e.target.textContent = recommendedFilter === 'include' ? 'Recommended'
       : recommendedFilter === 'exclude' ? 'Not Recommended'
       : 'Recommended?';
+    render();
+  });
+
+  document.getElementById('playtime-sort-btn').addEventListener('click', () => {
+    playtimeSort = cycleSortState(playtimeSort);
+    priceSort = undefined;
+    updateSortToggleButtons();
+    render();
+  });
+
+  document.getElementById('price-sort-btn').addEventListener('click', () => {
+    priceSort = cycleSortState(priceSort);
+    playtimeSort = undefined;
+    updateSortToggleButtons();
     render();
   });
 
@@ -445,6 +500,23 @@ function render() {
     if (excluded.some(t => tags.includes(t))) return false;
     return included.every(t => tags.includes(t));
   });
+
+  // Mutually exclusive (see the button handlers in init()) — at most one of
+  // these actually sorts the list; neither touches which reviews are
+  // visible, only their order.
+  if (playtimeSort) {
+    visible.sort((a, b) => playtimeSort === 'asc' ? a.hoursPlayed - b.hoursPlayed : b.hoursPlayed - a.hoursPlayed);
+  } else if (priceSort) {
+    // No price tag at all (see reviewPrice) always sorts last, regardless
+    // of direction — "unknown" isn't the same as "cheapest."
+    visible.sort((a, b) => {
+      const pa = reviewPrice(a), pb = reviewPrice(b);
+      if (pa === null && pb === null) return 0;
+      if (pa === null) return 1;
+      if (pb === null) return -1;
+      return priceSort === 'asc' ? pa - pb : pb - pa;
+    });
+  }
 
   if (!reviews.length) {
     app.innerHTML = '<p class="state-msg">No reviews yet.</p>';

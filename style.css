@@ -138,7 +138,33 @@ header {
   max-width: calc(860px - 2rem);
   margin: 1rem auto 0;
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
   justify-content: flex-start;
+}
+
+/* Leads #recommend-filter-row now, so only a trailing divider (before
+   Recommended?) is needed — no border-left, since nothing precedes it. */
+#sort-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding-right: 0.6rem;
+  border-right: 1px solid var(--border);
+}
+
+/* Pushed to the far end of the row via margin-left: auto; its own divider
+   is a border-left (mirroring #sort-controls' trailing one) rather than a
+   border-right, since it's the last thing in the row. */
+#tags-toggle-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  padding-left: 0.6rem;
+  border-left: 1px solid var(--border);
 }
 
 #tag-filters-top {
@@ -217,6 +243,10 @@ header {
 .tag-filter:hover { color: var(--text); border-color: var(--accent); }
 .tag-filter.included { background: var(--green); border-color: var(--green); color: #0f2a1e; }
 .tag-filter.excluded { background: var(--red); border-color: var(--red); color: #fff; text-decoration: line-through; }
+/* Playtime?/Price? sort toggles (#sort-controls) — a direction, not an
+   include/exclude choice, so this is deliberately its own neutral "active"
+   look rather than reusing .included/.excluded's green/red. */
+.tag-filter.sort-active { background: var(--surface); border-color: var(--accent); color: var(--text); }
 
 /* Pinned pills in the "Filter tags:" row (renderActiveTagFilters, app.js) —
    a two-button pill (label + ×) rather than a single .tag-filter button,
