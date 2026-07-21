@@ -3,6 +3,41 @@
 
 const SITE_LINK_TEXT = 'Full breakdown and thoughts on the game can be found here';
 
+// localStorage key prefix admin.html saves local-only review drafts under
+// (see its "Local drafts" section) — a review's own id is appended. Shared
+// so app.js can read the same keys admin.html writes without hand-typing the
+// prefix a second time.
+const LOCAL_DRAFT_PREFIX = 'local_draft_';
+
+// Overlays any pending local drafts (admin.html, same browser only) onto a
+// reviews array — lets the live site preview in-progress edits before
+// they're ever pushed to GitHub. Read-only: never touches localStorage
+// itself, just merges what's already there, and silently ignores malformed
+// entries rather than throwing (same "nothing there is a legitimate state"
+// convention as fetchDefaultRepoJson above). Also surfaces drafts for
+// reviews that don't exist in reviewsList at all yet — an unsaved new
+// review, authored but never pushed — so it can be previewed too.
+function applyLocalDrafts(reviewsList) {
+  const merged = reviewsList.map(r => {
+    const raw = localStorage.getItem(`${LOCAL_DRAFT_PREFIX}${r.id}`);
+    if (!raw) return r;
+    try { return JSON.parse(raw).data; } catch { return r; }
+  });
+
+  const knownIds = new Set(reviewsList.map(r => r.id));
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key.startsWith(LOCAL_DRAFT_PREFIX)) continue;
+    const id = key.slice(LOCAL_DRAFT_PREFIX.length);
+    if (knownIds.has(id)) continue;
+    try {
+      const draft = JSON.parse(localStorage.getItem(key));
+      merged.push(draft.data);
+    } catch { /* ignore malformed draft */ }
+  }
+  return merged;
+}
+
 // Public, read-only fallback data source — used by the live site (app.js)
 // whenever gh_reviews_cache has never been populated in this browser, and by
 // the admin tool (admin.html) whenever Settings has no owner/repo/token

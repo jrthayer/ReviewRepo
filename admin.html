@@ -303,8 +303,18 @@
     .status { font-size: 0.78rem; }
     .status.ok { color: var(--green); }
     .dirty-indicator-text { font-size: 0.78rem; font-weight: 600; color: var(--amber); }
+    #local-draft-flag { font-size: 0.95rem; cursor: default; }
+    .local-draft-warn { color: var(--amber); margin-left: 0.35rem; font-size: 0.8rem; }
 
     #bbcode-warnings { font-size: 0.78rem; color: var(--amber); min-height: 1.1em; margin-top: 0.3rem; }
+
+    #local-draft-banner {
+      display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+      background: rgba(233, 196, 106, 0.12); border: 1px solid var(--amber);
+      border-radius: 6px; padding: 0.5rem 0.7rem; margin-bottom: 0.75rem;
+      font-size: 0.82rem;
+    }
+    #local-draft-banner button { padding: 0.25rem 0.5rem !important; min-width: auto !important; }
 
     #import-panel { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
     #import-panel textarea { min-height: 280px; font-size: 0.8rem; }
@@ -653,6 +663,11 @@
 
     <form id="review-form" onsubmit="return false">
 
+      <div id="local-draft-banner" style="display:none">
+        <span id="local-draft-text"></span>
+        <button type="button" class="secondary" onclick="discardLocalDraft()">Discard</button>
+      </div>
+
       <label>Game Title
         <input id="f-title" type="text" placeholder="e.g. Elden Ring" spellcheck="true" oninput="syncId(); updatePreview()">
       </label>
@@ -788,7 +803,9 @@
       </div>
 
       <div id="save-row">
-        <button type="button" id="save-btn" onclick="saveReview()">Save</button>
+        <button type="button" id="save-btn" onclick="saveReview()">Save to GitHub</button>
+        <button type="button" class="secondary" id="save-local-btn" onclick="saveLocalDraft()" title="Save this review to the browser only, without pushing to GitHub">Save Locally</button>
+        <span id="local-draft-flag" class="local-draft-warn" style="display:none" title="This review has a local draft that hasn't been pushed to GitHub yet">&#9888;</span>
         <button type="button" id="delete-btn" class="danger" style="display:none" onclick="startDeleteReview()">Delete</button>
         <span id="delete-confirm" style="display:none">
           Delete this review?
@@ -843,6 +860,7 @@ let currentTags      = [];
 let currentCoreTags  = []; // review-local subset of currentTags shown as badges on the card (renderCoreTags, shared.js) — NOT a global tag category, independent of tagCategories/tagRegistry; edited via the "Core Tags" drop line in renderTags() below
 let tagHlIndex       = -1;
 let savedFormState = null; // getForm() snapshot as of the last load/save — refreshFormSnapshot() sets it, getChangedFormFields() diffs the live form against it field by field
+let pendingLocalDraft = null; // { id, savedAt, data } surfaced by checkLocalDraft() — set while the draft's Discard banner is showing (and its data already applied to the form), null otherwise
 let steamBody        = '';
 let extraTabs        = []; // [{ id, name, content }]
 let activeReviewTab  = 'steam';
@@ -1224,7 +1242,7 @@ function renderList() {
 
   el.innerHTML = reviews.map(r => `
     <div class="r-item ${editingId === r.id ? 'active' : ''}">
-      <button onclick="loadReview('${r.id}')">${escHtml(r.title)}</button>
+      <button onclick="loadReview('${r.id}')">${escHtml(r.title)}${hasLocalDraft(r.id) ? ' <span class="local-draft-warn" title="This review has a local draft that hasn\'t been pushed to GitHub yet">&#9888;</span>' : ''}</button>
     </div>`).join('');
 }
 
@@ -1232,6 +1250,7 @@ function renderList() {
 function loadReview(id) {
   const r = reviews.find(r => r.id === id);
   if (!r) return;
+  autoSaveLocalDraftIfDirty();
   discardTagChanges();
   editingId = id;
   setForm(r);
@@ -1241,9 +1260,11 @@ function loadReview(id) {
   document.getElementById('delete-confirm').style.display = 'none';
   renderList();
   updatePreview();
+  checkLocalDraft(id);
 }
 
 function newReview() {
+  autoSaveLocalDraftIfDirty();
   discardTagChanges();
   editingId = null;
   clearForm();
@@ -1254,6 +1275,7 @@ function newReview() {
   setSt('save-status', '', false);
   renderList();
   updatePreview();
+  hideLocalDraftBanner();
 }
 
 async function saveReview() {
@@ -1301,12 +1323,121 @@ async function saveReview() {
     document.getElementById('form-heading').textContent = 'Edit Review';
     document.getElementById('delete-btn').style.display = 'inline-block';
     renderList();
+    removeLocalDraft(data.id);
+    hideLocalDraftBanner();
     setSt('save-status', 'Saved!', false);
   } catch (e) {
     setSt('save-status', e.message, true);
   } finally {
     btn.disabled = false;
   }
+}
+
+// ── Local drafts (browser-only save, no GitHub push) ───────────────────────────
+// Deliberately simple: a draft is keyed by review id and, whenever one exists
+// for the review being loaded, wins by default — the form (and every preview
+// built from it) shows the draft's content immediately, no merging with
+// whatever's actually on GitHub. The banner stays up the whole time a draft is
+// showing; its only action is Discard, which drops the draft and reverts the
+// form to the real GitHub version (or blank, for a draft of a review that was
+// never pushed at all).
+function hasLocalDraft(id) {
+  return !!id && !!localStorage.getItem(`${LOCAL_DRAFT_PREFIX}${id}`);
+}
+
+// Persistent "this review has a local draft" symbol next to the save buttons —
+// redundant with the banner while a draft is showing, but also covers drafts
+// for OTHER reviews (surfaced via renderList()'s per-row warning instead).
+// Reflects whatever id is in the form right now, so it stays in sync across
+// discard/save.
+function updateLocalDraftFlag() {
+  document.getElementById('local-draft-flag').style.display = hasLocalDraft(v('f-id')) ? '' : 'none';
+}
+
+// Bundles the pending tagCategories/tagRegistry edit (if any) in with the
+// review's own fields — same "tied to whichever review is on screen" idea
+// tagsDirty already uses (see discardTagChanges) — so a draft round-trips a
+// category rename/recategorize the same way an actual GitHub save would via
+// ghCommitFiles, instead of silently dropping it back to Uncategorized.
+function writeLocalDraft(data) {
+  const payload = { savedAt: Date.now(), data };
+  if (tagsDirty) {
+    payload.tagCategories = tagCategories.map(c => ({ ...c }));
+    payload.tagRegistry = tagRegistry.map(t => ({ ...t }));
+  }
+  localStorage.setItem(`${LOCAL_DRAFT_PREFIX}${data.id}`, JSON.stringify(payload));
+  renderList();
+  updateLocalDraftFlag();
+}
+
+function removeLocalDraft(id) {
+  localStorage.removeItem(`${LOCAL_DRAFT_PREFIX}${id}`);
+  renderList();
+  updateLocalDraftFlag();
+}
+
+function saveLocalDraft() {
+  const data = getForm();
+  if (!data.title || !data.id) { setSt('save-status', 'Title and ID are required.', true); return; }
+  writeLocalDraft(data);
+  hideLocalDraftBanner();
+  setSt('save-status', 'Saved locally.', false);
+}
+
+// Silent counterpart to saveLocalDraft(), called whenever the review being
+// edited is about to go away on its own (switching reviews, "+ New", closing
+// the tab) rather than from an explicit click — no status text, and it no-ops
+// instead of erroring when there's no id yet or nothing has actually changed.
+function autoSaveLocalDraftIfDirty() {
+  const data = getForm();
+  if (!data.title || !data.id) return;
+  if (!isFormDirty(data) && !tagsDirty) return;
+  writeLocalDraft(data);
+}
+
+// Finding a draft here means it wins by default — the form (and every preview
+// that reads from it) shows the draft's content immediately, no extra click
+// needed. The banner's only job from here is offering a way back to whatever
+// was actually pulled from GitHub (or a blank form, for a draft of a review
+// that was never saved to GitHub at all).
+function checkLocalDraft(id) {
+  if (!id) { hideLocalDraftBanner(); return; }
+  const raw = localStorage.getItem(`${LOCAL_DRAFT_PREFIX}${id}`);
+  if (!raw) { hideLocalDraftBanner(); return; }
+  let draft;
+  try { draft = JSON.parse(raw); } catch { removeLocalDraft(id); hideLocalDraftBanner(); return; }
+  pendingLocalDraft = { id, ...draft };
+  setForm(draft.data);
+  if (draft.tagCategories && draft.tagRegistry) {
+    tagCategories = draft.tagCategories.map(c => ({ ...c }));
+    tagRegistry = draft.tagRegistry.map(t => ({ ...t }));
+    markTagsDirty();
+    renderTags();
+    renderManageTagsDropdown();
+  }
+  updatePreview();
+  const mins = Math.max(1, Math.round((Date.now() - draft.savedAt) / 60000));
+  const when = mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.round(mins / 60)}h ago` : `${Math.round(mins / 1440)}d ago`;
+  document.getElementById('local-draft-text').textContent = `Showing local draft saved ${when} — not yet pushed to GitHub.`;
+  document.getElementById('local-draft-banner').style.display = '';
+  updateLocalDraftFlag();
+}
+
+function hideLocalDraftBanner() {
+  pendingLocalDraft = null;
+  document.getElementById('local-draft-banner').style.display = 'none';
+  updateLocalDraftFlag();
+}
+
+function discardLocalDraft() {
+  if (!pendingLocalDraft) return;
+  const id = pendingLocalDraft.id;
+  removeLocalDraft(id);
+  const original = reviews.find(r => r.id === id);
+  if (original) setForm(original); else clearForm();
+  discardTagChanges(); // no-op unless the draft carried a pending category edit (see writeLocalDraft)
+  updatePreview();
+  hideLocalDraftBanner();
 }
 
 function startDeleteReview() {
@@ -1336,6 +1467,7 @@ async function confirmDeleteReview() {
     await pushFile(latest.filter(r => r.id !== editingId), `Delete review: ${editingId}`);
     reviews = latest.filter(r => r.id !== editingId);
     cacheReviews(reviews);
+    removeLocalDraft(editingId);
     newReview();
     setSt('save-status', 'Deleted.', false);
   } catch (e) {
@@ -3312,6 +3444,7 @@ function syncId() {
   if (!editingId) {
     set('f-id', v('f-title').toLowerCase().trim()
       .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''));
+    checkLocalDraft(v('f-id'));
   }
 }
 
@@ -3380,6 +3513,7 @@ function b64decode(b64) {
   renderReviewTabs();
   updatePreview();
   renderList();
+  updateLocalDraftFlag();
 
   if (cfg.owner && cfg.repo && cfg.token) loadReviewList();
   else {
@@ -3407,6 +3541,10 @@ function b64decode(b64) {
       closeManageTagsDropdown();
     }
   });
+
+  // Catch the tab closing/reloading/navigating away with unsaved edits still
+  // on screen — same silent local-draft save used when switching reviews.
+  window.addEventListener('beforeunload', autoSaveLocalDraftIfDirty);
 })();
 </script>
 </body>

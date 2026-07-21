@@ -60,6 +60,12 @@ async function init() {
     tagRegistry = defaultTags || [];
   }
 
+  // Same-browser preview: shows any in-progress admin.html edits (saved
+  // locally but not yet pushed to GitHub) as if they were already live — see
+  // applyLocalDrafts in shared.js. Only ever affects this browser; nobody
+  // else visiting the real site sees these.
+  reviews = applyLocalDrafts(reviews);
+
   const requestedId = new URLSearchParams(location.search).get('review');
   if (requestedId && reviews.some(r => r.id === requestedId)) {
     expandedId = requestedId;
