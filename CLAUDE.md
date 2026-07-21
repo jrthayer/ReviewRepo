@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A static, no-build, no-dependency site for publishing personal game reviews, plus a single-file admin tool for authoring them. There is no `package.json`, no bundler, and no test suite — it's six flat files (`index.html`, `app.js`, `admin.html`, `shared.js`, `style.css`, `serve.ps1`) served as-is.
 
+## Workflow: propose before editing
+
+For any change beyond a one-line/obvious tweak, **propose the approach and stop — do not edit any files that same turn.** State in 1-3 sentences what will change, why, and which files, then wait for explicit approval before touching anything. This applies even to requests that read as small or casual ("I'd like X", "can we Y") — being clearly-scoped is not an exemption, and approval from an earlier request in the conversation does not carry forward to the next one. Only skip the proposal step when the user's message is itself dictating the literal change to make verbatim, or for genuine one-line/typo fixes.
+
 ## Running it locally
 
 ```powershell
