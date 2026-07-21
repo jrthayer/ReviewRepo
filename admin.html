@@ -348,6 +348,7 @@
     }
     .tag-group-label-editable { cursor: pointer; }
     .tag-group-label-editable:hover { color: var(--text); text-decoration: underline; }
+    .tag-group-label-editable.dragging { opacity: 0.4; }
     .tag-group-rename-editor { display: inline-flex; align-items: center; gap: 0.3rem; }
     .tag-group-rename-editor input { width: 6rem; }
     .tag-group-rename-editor button { padding: 0.2rem 0.4rem !important; min-width: auto !important; }
@@ -889,6 +890,7 @@ let tagRegistry          = []; // [{ id, name, category }] — global tag name �
 let savedTagCategories        = []; // last GitHub-synced snapshot of tagCategories — discardTagChanges() reverts to this
 let savedTagRegistry          = []; // last GitHub-synced snapshot of tagRegistry — discardTagChanges() reverts to this
 let draggedTagIndex          = null; // index into currentTags of the chip currently being dragged between category lines
+let draggedTagCategoryId     = null; // tagCategories id of the category *line* being dragged to reorder it (see reorderTagCategories) — distinct from draggedTagIndex above (a chip drag), only one is ever non-null at a time
 let renamingTagCategoryId    = null; // category id currently showing its inline rename editor (input + confirm/cancel) in the tag chip editor
 let confirmingTagCatDeleteId = null; // category id currently showing its inline "delete?" confirmation in the tag chip editor
 let confirmingTagDeleteId    = null; // registry tag id currently showing its inline "delete?" confirmation in the Manage Tags dropdown
@@ -2342,12 +2344,14 @@ function renderTags() {
       : confirmingTagCatDeleteId === cat.id
         ? `<span class="tag-group-delete-confirm">${deleteConfirmRow(cat.name, `confirmDeleteTagCategory('${cat.id}')`, `cancelDeleteTagCategory()`)}</span>`
         : cat.id
-          ? `<span class="tag-group-label tag-group-label-editable" onclick="startRenameTagCategory('${cat.id}')" title="Click to rename">${escHtml(cat.name)}</span>
+          ? `<span class="tag-group-label tag-group-label-editable" draggable="true"
+                   ondragstart="onTagCategoryDragStart(event, '${cat.id}')" ondragend="onTagCategoryDragEnd(event)"
+                   onclick="startRenameTagCategory('${cat.id}')" title="Click to rename, drag to reorder">${escHtml(cat.name)}</span>
              <button type="button" class="tag-group-delete-btn" onclick="startDeleteTagCategory('${cat.id}')" title="Delete this category">&times;</button>`
           : `<span class="tag-group-label">Uncategorized</span>`;
 
     return `
-      <div class="tag-chip-group" ondragover="onTagLineDragOver(event)" ondragleave="onTagLineDragLeave(event)" ondrop="onTagLineDrop(event, '${escHtml(cat.name).replace(/'/g, "\\'")}')">
+      <div class="tag-chip-group" ondragover="onTagLineDragOver(event)" ondragleave="onTagLineDragLeave(event)" ondrop="onTagLineDrop(event, '${escHtml(cat.name).replace(/'/g, "\\'")}', '${cat.id}')">
         ${label}
         ${entries.map(e => chip(e.name, e.index)).join('')}
       </div>`;
@@ -2504,8 +2508,12 @@ function onTagChipDrop(e, index, scope) {
   updatePreview();
 }
 
+// Shared by two unrelated drags that both land on a .tag-chip-group line: a
+// tag chip (draggedTagIndex, recategorize) and a category label itself
+// (draggedTagCategoryId, reorder — see onTagCategoryDragStart below). Only
+// one is ever non-null at a time, so branching here is unambiguous.
 function onTagLineDragOver(e) {
-  if (draggedTagIndex === null) return;
+  if (draggedTagCategoryId === null && draggedTagIndex === null) return;
   e.preventDefault();
   e.currentTarget.classList.add('drag-over');
 }
@@ -2514,9 +2522,17 @@ function onTagLineDragLeave(e) {
   e.currentTarget.classList.remove('drag-over');
 }
 
-function onTagLineDrop(e, category) {
+function onTagLineDrop(e, category, categoryId) {
   e.preventDefault();
   e.currentTarget.classList.remove('drag-over');
+
+  if (draggedTagCategoryId !== null) {
+    const draggedId = draggedTagCategoryId;
+    draggedTagCategoryId = null;
+    if (categoryId && draggedId !== categoryId) reorderTagCategories(draggedId, categoryId);
+    return;
+  }
+
   const index = draggedTagIndex;
   draggedTagIndex = null;
   if (index === null || index === undefined) return;
@@ -2537,6 +2553,35 @@ function onTagLineDrop(e, category) {
 
   if ((entry.category || '') === category) return;
   reassignRegistryTag(entry.id, category);
+}
+
+// Dragging a category's own label (as opposed to a tag chip within it, see
+// onTagChipDragStart above) reorders tagCategories itself — where a
+// category's tags show up in the filter bar and a card's expanded tag list
+// (see groupTagNames, shared.js), not just this editor. requestAnimationFrame
+// defers the 'dragging' class by a frame so the browser's drag-ghost image is
+// snapshotted before the fade applies, same trick renderReviewTabs uses.
+function onTagCategoryDragStart(e, id) {
+  draggedTagCategoryId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  requestAnimationFrame(() => e.currentTarget.classList.add('dragging'));
+}
+
+function onTagCategoryDragEnd(e) {
+  draggedTagCategoryId = null;
+  e.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.tag-chip-group.drag-over').forEach(el => el.classList.remove('drag-over'));
+}
+
+function reorderTagCategories(draggedId, targetId) {
+  const fromIdx = tagCategories.findIndex(c => c.id === draggedId);
+  const toIdx = tagCategories.findIndex(c => c.id === targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const [moved] = tagCategories.splice(fromIdx, 1);
+  tagCategories.splice(toIdx, 0, moved);
+  markTagsDirty();
+  renderTags();
+  updatePreview();
 }
 
 // Dropping a chip onto the Core Tags line just flags it locally (adds its
@@ -3145,6 +3190,7 @@ function renderSitePreview(r) {
     permalinkHref: r.id ? siteReviewUrl(r.id) : null,
     disablePermalinkNav: true,
     tagRegistry,
+    tagCategories,
     showAllTags: expanded && sitePreviewShowAllTags,
   });
   document.querySelector('#site-preview .card-main').onclick = () => {

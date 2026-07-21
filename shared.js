@@ -153,11 +153,17 @@ function renderBBCode(raw) {
 
 // Groups a review's flat tag-name array by category, looked up (case-insensitively)
 // in the global tag registry (data/tags.json, [{ id, name, category }]). Categories
-// appear in order of first appearance among tagNames; unregistered/uncategorized
-// names collect into a single trailing group with category ''. Each entry keeps its
-// original index into tagNames so callers (admin's chip removal) can address it.
-function groupTagNames(tagNames, tagRegistry = []) {
+// are ordered per tagCategories (data/tag-categories.json — same source the tag
+// filter bar's allTagNamesSorted() ranks by, see app.js), so a card's expanded tag
+// list lines up top-to-bottom with the filter bar's category order; any category
+// name not found there (or when tagCategories isn't passed at all) falls back to
+// first-appearance order among tagNames, stable-sorted after the known ones.
+// Unregistered/uncategorized names collect into a single trailing group with
+// category ''. Each entry keeps its original index into tagNames so callers
+// (admin's chip removal) can address it.
+function groupTagNames(tagNames, tagRegistry = [], tagCategories = []) {
   const categoryOf = new Map(tagRegistry.map(t => [t.name.toLowerCase(), t.category || '']));
+  const categoryOrder = new Map(tagCategories.map((c, i) => [c.name, i]));
   const groups = [];
   const groupByCategory = new Map();
   const uncategorized = { category: '', entries: [] };
@@ -172,6 +178,9 @@ function groupTagNames(tagNames, tagRegistry = []) {
     }
     groupByCategory.get(category).entries.push({ name, index });
   });
+
+  const rank = g => categoryOrder.has(g.category) ? categoryOrder.get(g.category) : categoryOrder.size;
+  groups.sort((a, b) => rank(a) - rank(b));
 
   if (uncategorized.entries.length) groups.push(uncategorized);
   return groups;
@@ -201,9 +210,9 @@ function renderCoreTags(coreTagNames, { canExpand = false, expanded = false } = 
 // category name to show. Shown at the top of the expanded card's tab
 // content when the [data-toggle-tags] button (see renderCoreTags above) is
 // toggled on.
-function renderFullTagList(tagNames, tagRegistry = []) {
+function renderFullTagList(tagNames, tagRegistry = [], tagCategories = []) {
   if (!tagNames?.length) return '';
-  const groups = groupTagNames(tagNames, tagRegistry);
+  const groups = groupTagNames(tagNames, tagRegistry, tagCategories);
   const badge = e => `<span class="tag-badge">${escHtml(e.name)}</span>`;
   return `<div class="tag-list tag-list-full">${groups.map(g => `<div class="tag-group">
     <span class="tag-group-label">${g.category ? escHtml(g.category) : ''}</span>
@@ -224,6 +233,7 @@ function renderCard(r, opts = {}) {
     permalinkHref = null,
     disablePermalinkNav = false,
     tagRegistry = [],
+    tagCategories = [],
     showAllTags = false,
   } = opts;
 
@@ -254,7 +264,7 @@ function renderCard(r, opts = {}) {
       ${expanded ? `
         <div class="card-expanded">
           <div class="expanded-body">
-            ${showAllTags ? renderFullTagList(r.tags, tagRegistry) : ''}
+            ${showAllTags ? renderFullTagList(r.tags, tagRegistry, tagCategories) : ''}
             ${subTabs ? `
               <div class="sub-tabs">
                 ${subTabs.map((st, i) => `<button type="button" class="sub-tab ${i === activeSubIndex ? 'active' : ''}" data-sub-tab="${i}">${escHtml(st.name)}</button>`).join('')}

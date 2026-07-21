@@ -143,6 +143,7 @@ header {
 
 #tag-filters-top {
   display: flex;
+  position: relative;
 }
 
 #tag-search {
@@ -150,7 +151,7 @@ header {
   background: var(--border);
   border: 1px solid transparent;
   border-radius: 8px;
-  padding: 0.4rem 0.85rem;
+  padding: 0.4rem 2rem 0.4rem 0.85rem;
   font-size: 0.85rem;
   color: var(--text);
 }
@@ -158,10 +159,37 @@ header {
 #tag-search::placeholder { color: var(--muted); }
 #tag-search:focus { outline: none; border-color: var(--accent); }
 
+#tag-search-clear {
+  position: absolute;
+  right: 0.45rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+  border-radius: 50%;
+  cursor: pointer;
+}
+#tag-search-clear:hover { color: var(--text); }
+
+#tag-filters-active {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Always visible, regardless of whether #tag-filters-active has anything in
+   it — unlike that row's own visibility, this divider isn't conditional. */
 #tag-filter-groups {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
 }
 
 #tag-filters-bottom {
@@ -189,6 +217,57 @@ header {
 .tag-filter:hover { color: var(--text); border-color: var(--accent); }
 .tag-filter.included { background: var(--green); border-color: var(--green); color: #0f2a1e; }
 .tag-filter.excluded { background: var(--red); border-color: var(--red); color: #fff; text-decoration: line-through; }
+
+/* Pinned pills in the "Filter tags:" row (renderActiveTagFilters, app.js) —
+   a two-button pill (label + ×) rather than a single .tag-filter button,
+   since a native <button> can't nest another clickable <button> inside it. */
+.tag-filter-pinned {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  background: var(--border);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.2rem 0.35rem 0.2rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.tag-filter-pinned.included { background: var(--green); border-color: var(--green); color: #0f2a1e; }
+.tag-filter-pinned.excluded { background: var(--red); border-color: var(--red); color: #fff; }
+.tag-filter-pinned-label {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+}
+.tag-filter-pinned.excluded .tag-filter-pinned-label { text-decoration: line-through; }
+.tag-filter-pinned-label:hover { text-decoration: underline; }
+.tag-filter-pinned.excluded .tag-filter-pinned-label:hover { text-decoration: line-through underline; }
+.tag-filter-pinned-remove {
+  background: none;
+  border: none;
+  padding: 0.1rem 0.3rem;
+  color: inherit;
+  opacity: 0.7;
+  font-size: 0.85rem;
+  line-height: 1;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.tag-filter-pinned-remove:hover { opacity: 1; background: rgba(0, 0, 0, 0.15); }
+
+/* Truncation indicator appended by truncateTagGroup() (app.js) — not
+   interactive, so it deliberately doesn't pick up .tag-filter's pointer
+   cursor/hover styling. line-height: normal matches the <button> tag pills'
+   UA-default line-height — without it, this <span> inherits the body's 1.6,
+   rendering visibly taller than the row it's in and throwing off
+   truncateTagGroup()'s one-line-height measurement. */
+.tag-filter-more { cursor: default; flex: none; line-height: normal; }
+.tag-filter-more:hover { color: var(--muted); border-color: transparent; }
 
 /* ── Tag badges on cards ── */
 

@@ -6,6 +6,12 @@ let expandedId = null;
 // have every 'include' tag (AND) and none of the 'exclude' tags, matching
 // Steam's own tag-filter behavior.
 let tagFilterState = new Map();
+// Tag names shown in the persistent "Filter tags:" row (renderActiveTagFilters)
+// under the search box — a tag joins this the first time it's clicked
+// anywhere (category row or that row itself) and stays until its × is
+// clicked, surviving a cycle back to neutral (tagFilterState has no entry
+// for it) so you don't have to search for it again to reapply it.
+let tagFilterPinned = new Set();
 // Narrows which tag pills renderTagFilterGroups() shows; doesn't affect
 // which reviews are visible (that's tagFilterState above).
 let tagSearchQuery = '';
@@ -24,6 +30,24 @@ let showAllTags = false;
 // undefined), shared by tag pills and the Recommended toggle.
 function cycleTriState(cur) {
   return cur === undefined ? 'include' : cur === 'include' ? 'exclude' : undefined;
+}
+
+// Shared by every clickable tag pill (category rows and the pinned "Filter
+// tags:" row alike) — cycles its filter state and, distinctly from that
+// state, pins it to the active row so it's still there (in its neutral
+// style) even once cycled back off, rather than requiring a re-search to
+// bring it back. Only removeTagFilterPin (the pill's ×) actually unpins it.
+function cycleTagFilter(name) {
+  const next = cycleTriState(tagFilterState.get(name));
+  if (next === undefined) tagFilterState.delete(name); else tagFilterState.set(name, next);
+  tagFilterPinned.add(name);
+  render();
+}
+
+function removeTagFilterPin(name) {
+  tagFilterState.delete(name);
+  tagFilterPinned.delete(name);
+  render();
 }
 
 // Hamburger when the tag filter panel is collapsed, × when it's open —
@@ -80,6 +104,19 @@ async function init() {
   document.getElementById('tag-filters-toggle').addEventListener('click', () => {
     document.getElementById('tag-filters').classList.toggle('collapsed');
     updateTagFiltersToggleIcon();
+    // Re-run truncation now that the panel's actual width is measurable —
+    // the render() that originally built these rows may have run while it
+    // was still display:none (e.g. on page load, where it starts collapsed).
+    truncateTagGroups();
+  });
+
+  // Row widths depend on viewport width, so a wrap threshold computed once
+  // can go stale after a resize; re-measure (debounced) whenever the panel
+  // is actually open.
+  let tagGroupResizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(tagGroupResizeTimer);
+    tagGroupResizeTimer = setTimeout(truncateTagGroups, 150);
   });
 
   document.getElementById('recommend-filter-btn').addEventListener('click', e => {
@@ -100,11 +137,13 @@ async function init() {
 }
 
 // All distinct tag names in use, ordered by their category's position in
-// tagCategories (unknown categories after known ones, uncategorized last),
-// alphabetical within each group — so the filter bar's grouping stays stable.
+// tagCategories (unknown categories after known ones, uncategorized last);
+// within each group, most-used tag (by review count) first, alphabetical
+// among ties — so a category row's truncation (truncateTagGroup) folds away
+// its least-common tags first rather than an arbitrary alphabetical tail.
 function allTagNamesSorted() {
-  const set = new Set();
-  reviews.forEach(r => (r.tags || []).forEach(t => set.add(t)));
+  const counts = new Map();
+  reviews.forEach(r => (r.tags || []).forEach(t => counts.set(t, (counts.get(t) || 0) + 1)));
 
   const categoryOf = new Map(tagRegistry.map(t => [t.name.toLowerCase(), t.category || '']));
   const categoryOrder = new Map(tagCategories.map((c, i) => [c.name, i]));
@@ -114,7 +153,8 @@ function allTagNamesSorted() {
     return categoryOrder.has(cat) ? categoryOrder.get(cat) : categoryOrder.size;
   };
 
-  return [...set].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  return [...counts.keys()].sort((a, b) =>
+    rank(a) - rank(b) || counts.get(b) - counts.get(a) || a.localeCompare(b));
 }
 
 function renderTagFilters() {
@@ -129,19 +169,32 @@ function renderTagFilters() {
     el.innerHTML = `
       <div id="tag-filters-top">
         <input type="text" id="tag-search" placeholder="Search tags..." autocomplete="off">
+        <button type="button" id="tag-search-clear" title="Clear search" aria-label="Clear tag search" style="display:none">&times;</button>
       </div>
+      <div id="tag-filters-active"></div>
       <div id="tag-filter-groups"></div>
       <div id="tag-filters-bottom">
         <button class="tag-filter" id="tag-filter-clear">Clear Tags</button>
         <button class="tag-filter" id="tag-filter-close">Close</button>
       </div>
     `;
+    const tagSearchClearBtn = document.getElementById('tag-search-clear');
     document.getElementById('tag-search').addEventListener('input', e => {
       tagSearchQuery = e.target.value;
+      tagSearchClearBtn.style.display = tagSearchQuery ? '' : 'none';
+      renderTagFilterGroups();
+    });
+    tagSearchClearBtn.addEventListener('click', () => {
+      tagSearchQuery = '';
+      const input = document.getElementById('tag-search');
+      input.value = '';
+      input.focus();
+      tagSearchClearBtn.style.display = 'none';
       renderTagFilterGroups();
     });
     document.getElementById('tag-filter-clear').addEventListener('click', () => {
       tagFilterState.clear();
+      tagFilterPinned.clear();
       render();
     });
     // Same panel this button lives in is only visible when open, so this
@@ -152,7 +205,41 @@ function renderTagFilters() {
     });
   }
 
+  renderActiveTagFilters();
   renderTagFilterGroups();
+}
+
+// A persistent row of every pinned tag (tagFilterPinned, see its declaration
+// above), directly under the search box — unlike the category groups below
+// (renderTagFilterGroups), this is never cleared by a search query and never
+// subject to truncateTagGroup's one-line folding, so a pinned tag always
+// stays visible/clickable here no matter how it sorts, whether it's
+// currently include/exclude/neutral, or whether its own category row happens
+// to be showing it too (deliberately shown in both places at once). The
+// "Filter tags:" header always renders, even with nothing pinned yet.
+function renderActiveTagFilters() {
+  const el = document.getElementById('tag-filters-active');
+  if (!el) return;
+
+  const names = allTagNamesSorted().filter(n => tagFilterPinned.has(n));
+  const pill = name => {
+    const state = tagFilterState.get(name);
+    const cls = state ? ` ${state}d` : '';
+    return `
+      <span class="tag-filter-pinned${cls}">
+        <button type="button" class="tag-filter-pinned-label" data-tag="${escHtml(name)}">${escHtml(name)}</button>
+        <button type="button" class="tag-filter-pinned-remove" data-remove-tag="${escHtml(name)}" title="Remove from filters" aria-label="Remove ${escHtml(name)} filter">&times;</button>
+      </span>`;
+  };
+
+  el.innerHTML = `<span class="tag-group-label">Filter tags:</span>${names.map(pill).join('')}`;
+
+  el.querySelectorAll('.tag-filter-pinned-label').forEach(btn => {
+    btn.addEventListener('click', () => cycleTagFilter(btn.dataset.tag));
+  });
+  el.querySelectorAll('.tag-filter-pinned-remove').forEach(btn => {
+    btn.addEventListener('click', () => removeTagFilterPin(btn.dataset.removeTag));
+  });
 }
 
 function renderTagFilterGroups() {
@@ -166,7 +253,7 @@ function renderTagFilterGroups() {
     return;
   }
 
-  const groups = groupTagNames(matches, tagRegistry);
+  const groups = groupTagNames(matches, tagRegistry, tagCategories);
   const filterBtn = name => {
     const state = tagFilterState.get(name);
     const cls = state ? ` ${state}d` : '';
@@ -178,13 +265,59 @@ function renderTagFilterGroups() {
   }${g.entries.map(e => filterBtn(e.name)).join('')}</div>`).join('');
 
   el.querySelectorAll('.tag-filter[data-tag]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const name = btn.dataset.tag;
-      const next = cycleTriState(tagFilterState.get(name));
-      if (next === undefined) tagFilterState.delete(name); else tagFilterState.set(name, next);
-      render();
-    });
+    btn.addEventListener('click', () => cycleTagFilter(btn.dataset.tag));
   });
+
+  truncateTagGroups();
+}
+
+// Collapses each category row to a single line, replacing whichever trailing
+// tags would otherwise wrap onto a second line with a "+N" count — purely a
+// visual indicator (not clickable; the search box above is still how you
+// reach a hidden tag). No-ops while the panel is closed (its container is
+// display:none, so widths/heights all read as 0 and truncation would hide
+// everything) — the toggle handler and the resize listener below both
+// re-run this once the panel is actually visible/resized.
+function truncateTagGroups() {
+  const el = document.getElementById('tag-filter-groups');
+  if (!el || el.offsetParent === null) return;
+  el.querySelectorAll('.tag-group').forEach(truncateTagGroup);
+}
+
+function truncateTagGroup(group) {
+  // Undo whatever an earlier pass left behind (a resize can call this
+  // multiple times on the same, already-truncated rows) before re-measuring.
+  group.querySelector('.tag-filter-more')?.remove();
+  const buttons = [...group.querySelectorAll('.tag-filter[data-tag]')];
+  buttons.forEach(b => { b.style.display = ''; });
+  if (buttons.length < 2) return;
+
+  const lineHeight = buttons[0].offsetHeight;
+  const fitsOneLine = () => group.scrollHeight <= lineHeight + 4;
+  if (fitsOneLine()) return;
+
+  // Find how many tags actually overflow on their own merits first, with no
+  // "+N" pill in the row yet to compete for space — only once that's settled
+  // do we add the pill, and only give up one more real tag if the pill
+  // itself doesn't fit in whatever room the true overflow already freed up.
+  // Otherwise the pill's own width would routinely bump an extra tag or two
+  // that would've fit fine, condensing more of the row than actually overflowed.
+  let visibleCount = buttons.length;
+  while (visibleCount > 1 && !fitsOneLine()) {
+    visibleCount--;
+    buttons[visibleCount].style.display = 'none';
+  }
+
+  const more = document.createElement('span');
+  more.className = 'tag-filter tag-filter-more';
+  more.textContent = `+${buttons.length - visibleCount}`;
+  group.appendChild(more);
+
+  while (visibleCount > 1 && !fitsOneLine()) {
+    visibleCount--;
+    buttons[visibleCount].style.display = 'none';
+    more.textContent = `+${buttons.length - visibleCount}`;
+  }
 }
 
 // Bottom spacer that guarantees enough scroll room to hold a card's
@@ -328,6 +461,7 @@ function render() {
     activeSubIndex: expandedSubTab,
     permalinkHref: `?review=${r.id}`,
     tagRegistry,
+    tagCategories,
     showAllTags: expandedId === r.id && showAllTags,
   })).join('');
 
