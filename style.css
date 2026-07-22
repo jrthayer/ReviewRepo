@@ -101,20 +101,6 @@ header {
 #title-search::placeholder { color: var(--muted); }
 #title-search:focus { outline: none; border-color: var(--accent); }
 
-#tag-filters-toggle {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--muted);
-  padding: 0.4rem 0.7rem;
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-}
-
-#tag-filters-toggle:hover { color: var(--text); border-color: var(--accent); }
-#tag-filters-toggle.open { font-size: 1.1rem; }
-
 #tag-filters {
   /* #app itself has no visible border, so its true 860px extent is never
      apparent — only its .card children are, inset by #app's own 1rem
@@ -134,6 +120,21 @@ header {
 
 #tag-filters.collapsed { display: none; }
 
+/* Sits directly in #sort-controls next to #date-filter-group (see below),
+   not its own panel — picking a year fills the range to that year, picking
+   the blank placeholder back clears it (see clearDateRange in app.js). */
+#date-range-year {
+  background: var(--border);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+#date-range-year:focus { outline: none; border-color: var(--accent); }
+
 #recommend-filter-row {
   max-width: calc(860px - 2rem);
   margin: 1rem auto 0;
@@ -145,7 +146,7 @@ header {
 }
 
 /* Leads #recommend-filter-row now, so only a trailing divider (before
-   Recommended?) is needed — no border-left, since nothing precedes it. */
+   Recommended) is needed — no border-left, since nothing precedes it. */
 #sort-controls {
   display: flex;
   flex-wrap: wrap;
@@ -155,17 +156,42 @@ header {
   border-right: 1px solid var(--border);
 }
 
-/* Pushed to the far end of the row via margin-left: auto; its own divider
-   is a border-left (mirroring #sort-controls' trailing one) rather than a
-   border-right, since it's the last thing in the row. */
-#tags-toggle-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+/* Pushed to the far end of the row via margin-left: auto — same idea
+   #tags-toggle-controls used to use before Tags moved next to Recommended,
+   just applied straight to the button itself now rather than a wrapper div. */
+#clear-all-btn {
   margin-left: auto;
-  padding-left: 0.6rem;
-  border-left: 1px solid var(--border);
 }
+
+/* #date-sort-btn (a plain .tag-filter/.sort-active pill, same as
+   #playtime-sort-btn/#price-sort-btn — its label swaps between "Release
+   Date"/"Review Date") + #date-field-swap (flips which of those two is
+   active) read as one compound pill — same two-zone idea as
+   .tag-filter-pinned/.tag-filter-pinned-remove, just built from a .tag-filter
+   base plus a bare icon button instead of that class's own markup. */
+#date-filter-group {
+  display: flex;
+  align-items: stretch;
+}
+#date-filter-group #date-sort-btn {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+#date-field-swap {
+  background: var(--border);
+  border: 1px solid transparent;
+  border-left: 1px solid var(--bg);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-top-right-radius: 999px;
+  border-bottom-right-radius: 999px;
+  color: var(--muted);
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+#date-field-swap:hover { color: var(--text); border-color: var(--accent); border-left-color: var(--bg); }
 
 #tag-filters-top {
   display: flex;
@@ -243,7 +269,7 @@ header {
 .tag-filter:hover { color: var(--text); border-color: var(--accent); }
 .tag-filter.included { background: var(--green); border-color: var(--green); color: #0f2a1e; }
 .tag-filter.excluded { background: var(--red); border-color: var(--red); color: #fff; text-decoration: line-through; }
-/* Playtime?/Price? sort toggles (#sort-controls) — a direction, not an
+/* Playtime/Price sort toggles (#sort-controls) — a direction, not an
    include/exclude choice, so this is deliberately its own neutral "active"
    look rather than reusing .included/.excluded's green/red. */
 .tag-filter.sort-active { background: var(--surface); border-color: var(--accent); color: var(--text); }

@@ -47,14 +47,19 @@
   <div id="recommend-filter-row">
     <div id="sort-controls">
       <span class="tag-group-label">Sort By</span>
-      <button class="tag-filter" id="playtime-sort-btn">Playtime?</button>
-      <button class="tag-filter" id="price-sort-btn">Price?</button>
+      <button class="tag-filter" id="playtime-sort-btn">Playtime</button>
+      <button class="tag-filter" id="price-sort-btn">Price</button>
+      <div id="date-filter-group">
+        <button type="button" class="tag-filter" id="date-sort-btn">Release Date</button>
+        <button type="button" id="date-field-swap" aria-label="Switch between release date and review date" title="Switch between release date and review date">&#8596;</button>
+      </div>
+      <select id="date-range-year" aria-label="Filter to a year (select blank to clear)">
+        <option value="">Year</option>
+      </select>
     </div>
-    <button class="tag-filter" id="recommend-filter-btn">Recommended?</button>
-    <div id="tags-toggle-controls">
-      <span class="tag-group-label">Tags</span>
-      <button id="tag-filters-toggle" aria-label="Toggle tag filters" title="Show/hide tag filters">&#9776;</button>
-    </div>
+    <button class="tag-filter" id="recommend-filter-btn">Recommended</button>
+    <button type="button" class="tag-filter" id="tag-filters-toggle" aria-label="Toggle tag filters" title="Show/hide tag filters">Tags &#9881;</button>
+    <button type="button" class="tag-filter" id="clear-all-btn" title="Reset every filter and sort in this row">Clear</button>
   </div>
   <div id="tag-filters" class="collapsed"></div>
   <main id="app"></main>

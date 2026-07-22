@@ -22,12 +22,22 @@ let titleSearchQuery = '';
 // below the tag filter section: undefined (neutral) -> 'include' (must be
 // recommended) -> 'exclude' (must be not recommended) -> neutral.
 let recommendedFilter;
-// Sort direction for the Playtime?/Price? toggles below Recommended? —
+// Sort direction for the Playtime/Price/Date toggles below Recommended —
 // undefined (neutral, list keeps its natural/save order), 'asc', or 'desc'.
 // Mutually exclusive with each other (see wireSortButton): turning one on
-// resets the other to neutral, so at most one custom sort applies at a time.
+// resets the others to neutral, so at most one custom sort applies at a time.
 let playtimeSort;
 let priceSort;
+let dateSort;
+// Which date field the Date sort and the date-range filter both compare
+// against — reused by both rather than each having its own setting, since
+// "which date do you mean" is one question, not two. Defaults to Released
+// (not Reviewed) per the settings panel's own default.
+let dateField = 'released';
+// yyyy-mm-dd strings or undefined — undefined on both means "no range",
+// the default, which leaves the list unfiltered by date entirely regardless
+// of dateSort/dateField.
+let dateRangeFrom, dateRangeTo;
 let expandedBodyTab = 'steam';
 let expandedSubTab = 0;
 let showAllTags = false;
@@ -59,18 +69,81 @@ function reviewPrice(r) {
   return null;
 }
 
-// Refreshes both sort buttons' text/active styling from the current
-// playtimeSort/priceSort — called after either one is clicked (rather than
-// each handler only touching its own button) so the mutual-exclusivity
-// reset is always reflected on screen, not just in state.
+// Refreshes all three sort buttons' text/active styling from the current
+// playtimeSort/priceSort/dateSort — called after any one of them is clicked
+// (rather than each handler only touching its own button) so the mutual-
+// exclusivity reset is always reflected on screen, not just in state. Also
+// called after #date-field-swap changes dateField, since date-sort-btn's own
+// label (Release Date/Review Date) depends on it too.
 function updateSortToggleButtons() {
   const setLabel = (id, state, label) => {
     const btn = document.getElementById(id);
-    btn.textContent = state === 'asc' ? `${label} ↑` : state === 'desc' ? `${label} ↓` : `${label}?`;
+    btn.textContent = state === 'asc' ? `${label} ↑` : state === 'desc' ? `${label} ↓` : label;
     btn.classList.toggle('sort-active', !!state);
   };
   setLabel('playtime-sort-btn', playtimeSort, 'Playtime');
   setLabel('price-sort-btn', priceSort, 'Price');
+  setLabel('date-sort-btn', dateSort, dateField === 'released' ? 'Release Date' : 'Review Date');
+}
+
+// Reflects recommendedFilter on its own button — factored out of the click
+// handler so clearAllFilters() (below) can reuse it too.
+function updateRecommendButton() {
+  const btn = document.getElementById('recommend-filter-btn');
+  btn.classList.toggle('included', recommendedFilter === 'include');
+  btn.classList.toggle('excluded', recommendedFilter === 'exclude');
+  btn.textContent = recommendedFilter === 'include' ? 'Recommended'
+    : recommendedFilter === 'exclude' ? 'Not Recommended'
+    : 'Recommended';
+}
+
+// Resets every control in #recommend-filter-row to its default — Playtime/
+// Price/Date sort neutral, Date field back to Release Date with no range,
+// Recommended neutral, every tag filter removed. Doesn't touch #title-search
+// (a separate row entirely) or the Tags panel's open/closed state, matching
+// how "Clear Tags" already only clears state, not visibility.
+function clearAllFilters() {
+  playtimeSort = undefined;
+  priceSort = undefined;
+  dateSort = undefined;
+  dateField = 'released';
+  updateSortToggleButtons();
+
+  dateRangeFrom = undefined;
+  dateRangeTo = undefined;
+  document.getElementById('date-range-year').value = '';
+  populateDateRangeYears();
+
+  recommendedFilter = undefined;
+  updateRecommendButton();
+
+  tagFilterState.clear();
+  tagFilterPinned.clear();
+
+  render();
+}
+
+// Rebuilds the #date-range-year quick-picker from whichever date field
+// (dateField) is currently active — the two fields can have different years
+// represented, so this is re-run whenever that toggle changes, not just once
+// at load. Most recent first, matching cycleSortState's own "most useful
+// first" reasoning for its default direction.
+function populateDateRangeYears() {
+  const field = dateField === 'released' ? 'releaseDate' : 'datePosted';
+  const years = [...new Set(reviews.map(r => r[field]).filter(Boolean).map(d => d.slice(0, 4)))]
+    .sort((a, b) => b.localeCompare(a));
+  const select = document.getElementById('date-range-year');
+  select.innerHTML = `<option value="">Year</option>${years.map(y => `<option value="${y}">${y}</option>`).join('')}`;
+}
+
+// Called when #date-range-year's own placeholder is (re)selected (see its
+// change handler below) — resets state and the year picker itself back to
+// "no range" (this filter's default).
+function clearDateRange() {
+  dateRangeFrom = undefined;
+  dateRangeTo = undefined;
+  document.getElementById('date-range-year').value = '';
+  render();
 }
 
 // Shared by every clickable tag pill (category rows and the pinned "Filter
@@ -91,14 +164,21 @@ function removeTagFilterPin(name) {
   render();
 }
 
-// Hamburger when the tag filter panel is collapsed, × when it's open —
-// called after anything that changes #tag-filters' collapsed state (the
-// toggle itself, and the panel's own Close button).
+// Cog when the tag filter panel is collapsed, × when it's open — called
+// after anything that changes #tag-filters' collapsed state (the toggle
+// itself, and the panel's own Close button), and also from renderTagFilters()
+// on every render so it stays in sync with tagFilterState too. Reuses
+// .sort-active for the highlighted look rather than a bespoke class, same as
+// the Playtime/Price/Date sort buttons — this is a plain .tag-filter pill
+// now (see index.html), not the standalone icon button it used to be.
+// Highlighted whenever the panel's open OR any tag filter is actively
+// narrowing the list, so closing the panel with filters still applied
+// doesn't make it look like nothing's happening.
 function updateTagFiltersToggleIcon() {
   const collapsed = document.getElementById('tag-filters').classList.contains('collapsed');
   const btn = document.getElementById('tag-filters-toggle');
-  btn.innerHTML = collapsed ? '&#9776;' : '&times;';
-  btn.classList.toggle('open', !collapsed);
+  btn.innerHTML = collapsed ? 'Tags &#9881;' : 'Tags &times;';
+  btn.classList.toggle('sort-active', !collapsed || tagFilterState.size > 0);
 }
 
 async function init() {
@@ -130,6 +210,7 @@ async function init() {
   // applyLocalDrafts in shared.js. Only ever affects this browser; nobody
   // else visiting the real site sees these.
   reviews = applyLocalDrafts(reviews);
+  populateDateRangeYears();
 
   // Path-based (SITE_ROOT + 'review/<id>', see index.html's bootstrap
   // script) is the real permalink format; ?review=<id> is only checked as a
@@ -149,12 +230,37 @@ async function init() {
   // Pure visibility toggle — doesn't touch tagFilterState/tagSearchQuery, so
   // filters already applied stay applied while the panel is hidden.
   document.getElementById('tag-filters-toggle').addEventListener('click', () => {
-    document.getElementById('tag-filters').classList.toggle('collapsed');
+    const panel = document.getElementById('tag-filters');
+    panel.classList.toggle('collapsed');
     updateTagFiltersToggleIcon();
     // Re-run truncation now that the panel's actual width is measurable —
     // the render() that originally built these rows may have run while it
     // was still display:none (e.g. on page load, where it starts collapsed).
     truncateTagGroups();
+  });
+
+  // Flips which date field the sort and the range both compare against —
+  // no panel, just an immediate swap. Repopulates the year list (the two
+  // fields can have different years represented) and refreshes date-sort-btn's
+  // own label (Release Date/Review Date) via updateSortToggleButtons();
+  // leaves dateSort/the range as-is, same as this used to work when it was
+  // two separate Reviewed/Released buttons.
+  document.getElementById('date-field-swap').addEventListener('click', () => {
+    dateField = dateField === 'released' ? 'reviewed' : 'released';
+    updateSortToggleButtons();
+    populateDateRangeYears();
+    render();
+  });
+
+  // Stays showing the picked year (rather than resetting itself) so it
+  // reflects the range it just filled in; picking the placeholder back
+  // (empty value) clears the range instead (see clearDateRange).
+  document.getElementById('date-range-year').addEventListener('change', e => {
+    const year = e.target.value;
+    if (!year) { clearDateRange(); return; }
+    dateRangeFrom = `${year}-01-01`;
+    dateRangeTo = `${year}-12-31`;
+    render();
   });
 
   // Row widths depend on viewport width, so a wrap threshold computed once
@@ -166,19 +272,16 @@ async function init() {
     tagGroupResizeTimer = setTimeout(truncateTagGroups, 150);
   });
 
-  document.getElementById('recommend-filter-btn').addEventListener('click', e => {
+  document.getElementById('recommend-filter-btn').addEventListener('click', () => {
     recommendedFilter = cycleTriState(recommendedFilter);
-    e.target.classList.toggle('included', recommendedFilter === 'include');
-    e.target.classList.toggle('excluded', recommendedFilter === 'exclude');
-    e.target.textContent = recommendedFilter === 'include' ? 'Recommended'
-      : recommendedFilter === 'exclude' ? 'Not Recommended'
-      : 'Recommended?';
+    updateRecommendButton();
     render();
   });
 
   document.getElementById('playtime-sort-btn').addEventListener('click', () => {
     playtimeSort = cycleSortState(playtimeSort);
     priceSort = undefined;
+    dateSort = undefined;
     updateSortToggleButtons();
     render();
   });
@@ -186,9 +289,20 @@ async function init() {
   document.getElementById('price-sort-btn').addEventListener('click', () => {
     priceSort = cycleSortState(priceSort);
     playtimeSort = undefined;
+    dateSort = undefined;
     updateSortToggleButtons();
     render();
   });
+
+  document.getElementById('date-sort-btn').addEventListener('click', () => {
+    dateSort = cycleSortState(dateSort);
+    playtimeSort = undefined;
+    priceSort = undefined;
+    updateSortToggleButtons();
+    render();
+  });
+
+  document.getElementById('clear-all-btn').addEventListener('click', clearAllFilters);
 
   render();
 
@@ -219,6 +333,8 @@ function allTagNamesSorted() {
 }
 
 function renderTagFilters() {
+  updateTagFiltersToggleIcon();
+
   const el = document.getElementById('tag-filters');
   if (!allTagNamesSorted().length) { el.innerHTML = ''; return; }
 
@@ -498,13 +614,27 @@ function render() {
   const included = [...tagFilterState].filter(([, s]) => s === 'include').map(([t]) => t);
   const excluded = [...tagFilterState].filter(([, s]) => s === 'exclude').map(([t]) => t);
   const titleQuery = titleSearchQuery.trim().toLowerCase();
+  // Independent of dateSort — a range narrows which reviews show regardless
+  // of whether Date itself is actively sorting the list, same as
+  // Recommended/tag filters are independent of Playtime/Price.
+  const reviewDate = r => dateField === 'released' ? r.releaseDate : r.datePosted;
   const visible = reviews.filter(r => {
     if (titleQuery && !r.title.toLowerCase().includes(titleQuery)) return false;
     if (recommendedFilter === 'include' && !r.recommended) return false;
     if (recommendedFilter === 'exclude' && r.recommended) return false;
     const tags = r.tags || [];
     if (excluded.some(t => tags.includes(t))) return false;
-    return included.every(t => tags.includes(t));
+    if (!included.every(t => tags.includes(t))) return false;
+    if (dateRangeFrom || dateRangeTo) {
+      const d = reviewDate(r);
+      // No date in the active field at all (e.g. releaseDate unset) can't
+      // fall within any range, so it drops out while a range is active —
+      // same "unknown isn't a match" rule reviewPrice's sort uses below.
+      if (!d) return false;
+      if (dateRangeFrom && d < dateRangeFrom) return false;
+      if (dateRangeTo && d > dateRangeTo) return false;
+    }
+    return true;
   });
 
   // Mutually exclusive (see the button handlers in init()) — at most one of
@@ -521,6 +651,17 @@ function render() {
       if (pa === null) return 1;
       if (pb === null) return -1;
       return priceSort === 'asc' ? pa - pb : pb - pa;
+    });
+  } else if (dateSort) {
+    // yyyy-mm-dd strings compare correctly with plain < / >, same as the
+    // range filter above. No date at all (e.g. releaseDate unset) always
+    // sorts last, regardless of direction — mirrors priceSort's rule above.
+    visible.sort((a, b) => {
+      const da = reviewDate(a), db = reviewDate(b);
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+      return dateSort === 'asc' ? (da < db ? -1 : da > db ? 1 : 0) : (da > db ? -1 : da < db ? 1 : 0);
     });
   }
 
