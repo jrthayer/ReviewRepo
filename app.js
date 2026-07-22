@@ -112,6 +112,7 @@ function clearAllFilters() {
   dateRangeFrom = undefined;
   dateRangeTo = undefined;
   document.getElementById('date-range-year').value = '';
+  updateDateRangeYearActive();
   populateDateRangeYears();
 
   recommendedFilter = undefined;
@@ -136,6 +137,14 @@ function populateDateRangeYears() {
   select.innerHTML = `<option value="">Year</option>${years.map(y => `<option value="${y}">${y}</option>`).join('')}`;
 }
 
+// Reflects whether a range is currently applied on #date-range-year itself —
+// reuses .sort-active for the same "diverged from neutral" look the rest of
+// the row's buttons use, since a range can only ever be set through this
+// control now. Called wherever dateRangeFrom/dateRangeTo change.
+function updateDateRangeYearActive() {
+  document.getElementById('date-range-year').classList.toggle('sort-active', !!dateRangeFrom);
+}
+
 // Called when #date-range-year's own placeholder is (re)selected (see its
 // change handler below) — resets state and the year picker itself back to
 // "no range" (this filter's default).
@@ -143,6 +152,7 @@ function clearDateRange() {
   dateRangeFrom = undefined;
   dateRangeTo = undefined;
   document.getElementById('date-range-year').value = '';
+  updateDateRangeYearActive();
   render();
 }
 
@@ -240,14 +250,22 @@ async function init() {
   });
 
   // Flips which date field the sort and the range both compare against —
-  // no panel, just an immediate swap. Repopulates the year list (the two
-  // fields can have different years represented) and refreshes date-sort-btn's
-  // own label (Release Date/Review Date) via updateSortToggleButtons();
-  // leaves dateSort/the range as-is, same as this used to work when it was
-  // two separate Reviewed/Released buttons.
+  // no panel, just an immediate swap. Refreshes date-sort-btn's own label
+  // (Release Date/Review Date) via updateSortToggleButtons() and leaves
+  // dateSort as-is (same as this used to work when it was two separate
+  // Reviewed/Released buttons), but clears any active range: a range's
+  // date-string bounds were chosen against one field's years and don't mean
+  // anything carried over to the other (and populateDateRangeYears()
+  // rebuilding the option list would silently reset the visible selection
+  // to the blank placeholder anyway, without this leaving .sort-active
+  // stuck highlighted around it).
   document.getElementById('date-field-swap').addEventListener('click', () => {
     dateField = dateField === 'released' ? 'reviewed' : 'released';
     updateSortToggleButtons();
+    dateRangeFrom = undefined;
+    dateRangeTo = undefined;
+    document.getElementById('date-range-year').value = '';
+    updateDateRangeYearActive();
     populateDateRangeYears();
     render();
   });
@@ -260,6 +278,7 @@ async function init() {
     if (!year) { clearDateRange(); return; }
     dateRangeFrom = `${year}-01-01`;
     dateRangeTo = `${year}-12-31`;
+    updateDateRangeYearActive();
     render();
   });
 

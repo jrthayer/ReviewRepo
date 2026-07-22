@@ -122,16 +122,21 @@ header {
 
 /* Sits directly in #sort-controls next to #date-filter-group (see below),
    not its own panel — picking a year fills the range to that year, picking
-   the blank placeholder back clears it (see clearDateRange in app.js). */
+   the blank placeholder back clears it (see clearDateRange in app.js).
+   Muted by default like the row's other neutral controls; .sort-active
+   (toggled in app.js whenever a range is actually applied) reuses the exact
+   same active look .tag-filter.sort-active uses elsewhere in this row. */
 #date-range-year {
   background: var(--border);
   border: 1px solid transparent;
   border-radius: 8px;
   padding: 0.3rem 0.6rem;
   font-size: 0.8rem;
-  color: var(--text);
+  color: var(--muted);
   cursor: pointer;
 }
+
+#date-range-year.sort-active { background: var(--surface); border-color: var(--accent); color: var(--text); }
 
 #date-range-year:focus { outline: none; border-color: var(--accent); }
 
