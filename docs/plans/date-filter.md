@@ -1,5 +1,11 @@
 # Date filter/sort control
 
+> Implemented in commit: [`eb1d1e4`](https://github.com/jrthayer/ReviewRepo/commit/eb1d1e4) — the design evolved substantially past this original plan through several follow-up rounds in the same session:
+> - Date moved out from next to Recommended into `#sort-controls`, next to Price.
+> - A "Year" quick-picker (`#date-range-year`) was added to the settings panel, then the manual From/To date inputs and the whole settings panel/cog were dropped entirely — the year picker (with its blank placeholder as the clear action) became the *only* way to set a range, and it now lives directly in the row next to the Date pill instead of behind a panel.
+> - The Reviewed/Released toggle pair was replaced by a single swap icon (↔) on the compound pill; `#date-sort-btn`'s own label became "Release Date"/"Review Date" instead of the generic "Date", updating live on swap.
+> - Unrelated small refinements landed in the same commit: the "?" suffix was dropped from every neutral-state button label in the row (Playtime/Price/Date/Recommended); Tags became a plain `.tag-filter` pill with a cog/× icon (matching the row's other buttons) instead of a label+hamburger pair, moved next to Recommended, and stays highlighted while closed if a tag filter is still active; a row-wide "Clear" button was added at the very end of the row to reset every control back to default in one click.
+
 ## Context
 
 The site's filter/sort row (`#recommend-filter-row`) currently has Playtime?/Price? sort toggles, a Recommended? filter, and the Tags panel toggle. This adds a fourth control, **Date**, that's really two features sharing one entry point:
