@@ -540,7 +540,7 @@
 
     #error-banner {
       position: fixed;
-      left: 0; right: 0; bottom: var(--bottom-banner-offset, 0px);
+      left: 0; right: 0; bottom: 0;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -554,7 +554,14 @@
       transform: translateY(100%);
       transition: transform 0.2s ease;
     }
-    #error-banner.visible { transform: translateY(0); }
+    /* bottom stays 0 (not --bottom-banner-offset) so the hidden state's
+       translateY(100%) always slides it fully offscreen relative to the true
+       viewport edge — shifting bottom by the offset instead would leave
+       translateY(100%) only sliding it down to flush with whatever
+       .bottom-banner is showing, landing on top of it instead of vanishing.
+       The offset is applied as an upward shift here instead, so it still
+       floats above any visible persistent banner while shown. */
+    #error-banner.visible { transform: translateY(calc(-1 * var(--bottom-banner-offset, 0px))); }
     #error-banner-close {
       background: none !important; color: #fff; padding: 0 0.25rem !important;
       font-size: 1rem; line-height: 1; min-width: auto !important; opacity: 0.85;
