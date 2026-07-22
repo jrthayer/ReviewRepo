@@ -540,7 +540,7 @@
 
     #error-banner {
       position: fixed;
-      left: 0; right: 0; bottom: 0;
+      left: 0; right: 0; bottom: var(--bottom-banner-offset, 0px);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -561,45 +561,41 @@
     }
     #error-banner-close:hover { opacity: 1; }
 
-    #readonly-banner {
-      position: fixed;
-      left: 0; right: 0; bottom: 0;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      gap: 0.75rem;
-      background: var(--amber);
-      color: var(--bg);
-      font-size: 0.8rem;
-      font-weight: 600;
-      padding: 0.5rem 1rem;
-      z-index: 99;
-    }
-    #readonly-banner.visible { display: flex; }
-
-    /* Same semi-transparent amber treatment as #local-reviews/.local-reviews-note
-       — a border-top stands in for the solid-background contrast #readonly-banner
-       uses, since the background alone isn't enough to read as a distinct bar
-       once it's this translucent.
-       Unlike #error-banner/#readonly-banner (position: fixed, overlaying the
-       viewport), this one is a real flex child of body — flex-shrink: 0, same
-       as header — so #workspace's available height shrinks to make room for
-       it instead of it floating on top of whatever's scrolled to the bottom
-       of #left-panel/#right-panel. */
-    #local-draft-bottom-banner {
+    /* Persistent (no auto-hide) bottom banners — unlike #error-banner
+       (position: fixed, floats above these via --bottom-banner-offset), each
+       .bottom-banner is a real flex child of body — flex-shrink: 0, same as
+       header — so #workspace's available height shrinks to make room for it
+       instead of it overlaying whatever's scrolled to the bottom of
+       #left-panel/#right-panel. Structural rules live here so a future
+       persistent banner only needs class="bottom-banner" + its own
+       background/color/border, plus showBottomBanner(id)/hideBottomBanner(id)
+       to show/hide it (see admin JS) — no new CSS or offset logic. */
+    .bottom-banner {
       flex-shrink: 0;
       display: none;
       align-items: center;
       justify-content: center;
       gap: 0.75rem;
-      background: rgba(233, 196, 106, 0.12);
-      border-top: 1px solid var(--amber);
-      color: var(--amber);
       font-size: 0.8rem;
       font-weight: 600;
       padding: 0.5rem 1rem;
     }
-    #local-draft-bottom-banner.visible { display: flex; }
+    .bottom-banner.visible { display: flex; }
+
+    #readonly-banner {
+      background: var(--amber);
+      color: var(--bg);
+    }
+
+    /* Same semi-transparent amber treatment as #local-reviews/.local-reviews-note
+       — a border-top stands in for the solid-background contrast #readonly-banner
+       uses, since the background alone isn't enough to read as a distinct bar
+       once it's this translucent. */
+    #local-draft-bottom-banner {
+      background: rgba(233, 196, 106, 0.12);
+      border-top: 1px solid var(--amber);
+      color: var(--amber);
+    }
     .local-draft-bottom-banner-btn {
       background: none; color: var(--amber); border: 1px solid var(--amber) !important;
       padding: 0.2rem 0.6rem !important; min-width: auto !important; font-size: 0.78rem;
@@ -898,11 +894,11 @@
   <button type="button" id="error-banner-close" onclick="hideError()">&times;</button>
 </div>
 
-<div id="readonly-banner">
+<div id="readonly-banner" class="bottom-banner">
   <span>Read-only: showing default reviews. Configure GitHub above to edit and save your own.</span>
 </div>
 
-<div id="local-draft-bottom-banner">
+<div id="local-draft-bottom-banner" class="bottom-banner">
   <span>&#9888; This review has local changes that haven't been pushed to GitHub yet.</span>
   <button type="button" class="local-draft-bottom-banner-btn" onclick="saveReview()">Save to GitHub</button>
   <button type="button" class="local-draft-bottom-banner-btn" onclick="discardLocalDraft()">Discard Changes</button>
@@ -1557,7 +1553,8 @@ function getLocalDraftEntries() {
 // whatever id is in the form right now, so it stays in sync across
 // discard/save.
 function updateLocalDraftFlag() {
-  document.getElementById('local-draft-bottom-banner').classList.toggle('visible', hasLocalDraft(v('f-id')));
+  if (hasLocalDraft(v('f-id'))) showBottomBanner('local-draft-bottom-banner');
+  else hideBottomBanner('local-draft-bottom-banner');
 }
 
 // Bundles the pending tagCategories/tagRegistry edit (if any) in with the
@@ -3798,16 +3795,39 @@ function hideError() {
   document.getElementById('error-banner').classList.remove('visible');
 }
 
+// Shared show/hide for any .bottom-banner (#readonly-banner,
+// #local-draft-bottom-banner, and any future persistent banner) — always use
+// these instead of toggling the 'visible' class directly, so
+// #error-banner's --bottom-banner-offset (it floats via position: fixed
+// above whichever of these are currently showing) stays in sync. A new
+// persistent banner just needs class="bottom-banner" on its element plus
+// its own background/color/border in CSS; no new offset logic required.
+function showBottomBanner(id) {
+  document.getElementById(id).classList.add('visible');
+  updateBottomBannerOffset();
+}
+
+function hideBottomBanner(id) {
+  document.getElementById(id).classList.remove('visible');
+  updateBottomBannerOffset();
+}
+
+function updateBottomBannerOffset() {
+  const offset = Array.from(document.querySelectorAll('.bottom-banner.visible'))
+    .reduce((sum, el) => sum + el.offsetHeight, 0);
+  document.documentElement.style.setProperty('--bottom-banner-offset', offset + 'px');
+}
+
 // Persistent (no auto-hide, no dismiss) — unlike showError/hideError, this
 // isn't a transient notice, it stays up for as long as the editor is
 // actually showing DEFAULT_DATA_REPO's read-only fallback data (see
 // loadDefaultReviewList/loadReviewList).
 function showReadonlyBanner() {
-  document.getElementById('readonly-banner').classList.add('visible');
+  showBottomBanner('readonly-banner');
 }
 
 function hideReadonlyBanner() {
-  document.getElementById('readonly-banner').classList.remove('visible');
+  hideBottomBanner('readonly-banner');
 }
 
 function b64encode(str) {
