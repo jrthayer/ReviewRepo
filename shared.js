@@ -3,6 +3,33 @@
 
 const SITE_LINK_TEXT = 'Full breakdown and thoughts on the game can be found here';
 
+// Site favicon — an inline SVG (no separate asset file) so its colors can
+// stay in sync with style.css's own tokens (--accent, --text) by eye rather
+// than a second file drifting out of sync. Its own <style>/@media block
+// (not style.css's custom properties, which a favicon fetched outside the
+// page can't see) makes the "RR" mark switch between black and --text
+// (#eaeaea) with the browser/OS's prefers-color-scheme. Applied via a
+// data: URI at load time by applyFavicon() below, called once at the
+// bottom of this file since both index.html and admin/index.html load
+// shared.js and both want it.
+const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    text { fill: #000000; }
+    @media (prefers-color-scheme: dark) { text { fill: #eaeaea; } }
+  </style>
+  <text x="7" y="10" text-anchor="middle" dominant-baseline="central" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="22">R</text>
+  <text x="24" y="22" text-anchor="middle" dominant-baseline="central" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="22">R</text>
+</svg>`;
+
+function applyFavicon() {
+  const link = document.createElement('link');
+  link.rel = 'icon';
+  link.type = 'image/svg+xml';
+  link.href = 'data:image/svg+xml,' + encodeURIComponent(FAVICON_SVG);
+  document.head.appendChild(link);
+}
+applyFavicon();
+
 // localStorage key prefix admin.html saves local-only review drafts under
 // (see its "Local drafts" section) — a review's own id is appended. Shared
 // so app.js can read the same keys admin.html writes without hand-typing the
