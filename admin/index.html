@@ -23,6 +23,22 @@
       --input-bg: #0d1526;
     }
 
+    /* Alternate neutral-grey palette, toggled via the header button
+       (initThemeToggle, shared.js) — see docs/plans/grey-theme-toggle.md.
+       --accent/--green/--red/--amber/--text are semantic rather than "the
+       grey backdrop", so they stay the same in both themes; only the
+       neutral surface levels change. #site-preview isn't affected either
+       way — it already hardcodes the site's own real palette regardless of
+       admin's --bg/--surface (see its own comment further down). */
+    :root[data-theme="grey"] {
+      --bg: #141414;
+      --surface: #222222;
+      --panel: #1c1c1c;
+      --border: #3a3a3a;
+      --muted: #9a9a9a;
+      --input-bg: #101010;
+    }
+
     body {
       background: var(--bg);
       color: var(--text);
@@ -48,6 +64,12 @@
     header span { font-weight: 700; font-size: 1.05rem; }
     header a { color: var(--muted); text-decoration: none; font-size: 0.82rem; }
     header a:hover { color: var(--text); }
+    #header-actions { display: flex; align-items: center; gap: 0.85rem; }
+    #theme-toggle {
+      background: none; border: none; padding: 0;
+      color: var(--muted); font-size: 0.95rem; line-height: 1; cursor: pointer;
+    }
+    #theme-toggle:hover { color: var(--text); }
 
     /* ── Settings panel ── */
     #settings {
@@ -650,7 +672,10 @@
 
 <header>
   <span>Review Admin</span>
-  <a href="../">← View site</a>
+  <div id="header-actions">
+    <button type="button" id="theme-toggle" aria-label="Toggle grey theme" title="Toggle grey theme">◑</button>
+    <a href="../">← View site</a>
+  </div>
 </header>
 
 <details id="settings">
@@ -4238,6 +4263,8 @@ function b64decode(b64) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 (function init() {
+  initThemeToggle('theme-toggle');
+
   const cfg = getCfg();
   if (cfg.owner)  set('gh-owner',  cfg.owner);
   if (cfg.repo)   set('gh-repo',   cfg.repo);

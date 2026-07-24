@@ -9,6 +9,18 @@
   --muted: #8a8a9a;
 }
 
+/* Alternate neutral-grey palette, toggled via the header button
+   (initThemeToggle, shared.js) — see docs/plans/grey-theme-toggle.md.
+   --accent/--green/--red/--text are semantic (links, recommend/not-
+   recommend, main text) rather than "the grey backdrop", so they stay the
+   same in both themes; only the neutral surface levels change. */
+:root[data-theme="grey"] {
+  --bg: #1a1a1a;
+  --surface: #242424;
+  --border: #3a3a3a;
+  --muted: #9a9a9a;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -75,6 +87,12 @@ header {
 
 #site-title:hover { color: var(--accent); }
 
+#header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
 #admin-link {
   color: var(--muted);
   text-decoration: none;
@@ -83,6 +101,18 @@ header {
 }
 
 #admin-link:hover { color: var(--text); }
+
+#theme-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#theme-toggle:hover { color: var(--text); }
 
 #app {
   max-width: 860px;

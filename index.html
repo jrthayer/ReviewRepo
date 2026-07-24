@@ -30,6 +30,15 @@
       }
     })();
 
+    // Same read as shared.js's applyStoredTheme() — duplicated here purely
+    // for timing: shared.js itself doesn't load until late in <body> on
+    // this page, which would let the default (non-grey) theme flash
+    // visible first. shared.js's own copy still runs too once it loads,
+    // redundantly but harmlessly.
+    if (localStorage.getItem('site_theme') === 'grey') {
+      document.documentElement.dataset.theme = 'grey';
+    }
+
     const _v = Date.now();
     const _l = document.createElement('link');
     _l.rel = 'stylesheet'; _l.href = SITE_ROOT + 'style.css?v=' + _v;
@@ -45,7 +54,10 @@
       </svg>
       Review Repo
     </a>
-    <a href="admin/" id="admin-link" aria-label="Admin" title="Admin">⚙</a>
+    <div id="header-actions">
+      <button type="button" id="theme-toggle" aria-label="Toggle grey theme" title="Toggle grey theme">◑</button>
+      <a href="admin/" id="admin-link" aria-label="Admin" title="Admin">⚙</a>
+    </div>
   </header>
   <div id="title-search-bar">
     <input type="text" id="title-search" placeholder="Search by game name..." autocomplete="off">

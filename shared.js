@@ -30,6 +30,45 @@ function applyFavicon() {
 }
 applyFavicon();
 
+// One shared localStorage key for the grey-theme toggle — index.html and
+// admin.html both read/write it, so picking it on either page carries over
+// to the other, even though each applies it via its own separate
+// :root[data-theme="grey"] block (style.css for the site, admin.html's own
+// inline <style> for the admin UI — they already have separate, differently
+// -valued :root palettes today; this doesn't unify them).
+const THEME_STORAGE_KEY = 'site_theme';
+
+// Applied unconditionally at load time (not just from initThemeToggle's
+// click handler) so a page that only loads shared.js as a blocking <head>
+// script (admin.html) gets the saved theme before first paint with no
+// extra wiring. index.html loads shared.js too late in <body> for that —
+// it duplicates this same read earlier, in its own bootstrap <head>
+// script, purely for timing; this copy still runs too, redundantly but
+// harmlessly, once shared.js loads there.
+function applyStoredTheme() {
+  if (localStorage.getItem(THEME_STORAGE_KEY) === 'grey') {
+    document.documentElement.dataset.theme = 'grey';
+  }
+}
+applyStoredTheme();
+
+// Wires a toggle button (by id) to flip between the default and grey
+// themes and persist the choice — shared so index.html/admin.html behave
+// identically rather than each hand-rolling the same flip/save/clear logic.
+function initThemeToggle(buttonId) {
+  const btn = document.getElementById(buttonId);
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    if (document.documentElement.dataset.theme === 'grey') {
+      delete document.documentElement.dataset.theme;
+      localStorage.removeItem(THEME_STORAGE_KEY);
+    } else {
+      document.documentElement.dataset.theme = 'grey';
+      localStorage.setItem(THEME_STORAGE_KEY, 'grey');
+    }
+  });
+}
+
 // localStorage key prefix admin.html saves local-only review drafts under
 // (see its "Local drafts" section) — a review's own id is appended. Shared
 // so app.js can read the same keys admin.html writes without hand-typing the

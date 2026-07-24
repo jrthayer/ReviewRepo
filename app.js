@@ -237,6 +237,8 @@ async function init() {
     expandedId = requestedId;
   }
 
+  initThemeToggle('theme-toggle');
+
   document.getElementById('title-search').addEventListener('input', e => {
     titleSearchQuery = e.target.value;
     render();
