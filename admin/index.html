@@ -214,6 +214,31 @@
     .form-tab-confirm { cursor: default; white-space: nowrap; }
 
     .sub-tab-bar { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; padding: 0.5rem 0 0.4rem; }
+    /* #sub-tab-bar is the outer mount point; renderSubTabBar() (see below)
+       fills it with one .sub-tab-level wrapper per nesting depth (a pill row
+       plus its own always-visible content textarea), so the container
+       itself stacks those wrappers in a column instead of laying pills out
+       directly — overrides .sub-tab-bar's own row layout for this one id. */
+    #sub-tab-bar { flex-direction: column; align-items: stretch; }
+    .sub-tab-level-nested { padding-top: 0.2rem; }
+    .sub-tab-level-nested .form-subtab { font-size: 0.7rem; padding: 0.2rem 0.5rem; }
+    /* A bar's own content textarea (see renderSubTabBar) — shows whichever
+       tab in that bar is currently active, same textarea styling as
+       #f-review-text but visually secondary since it sits mid-stack. */
+    .sub-tab-content {
+      display: block; width: 100%; resize: vertical;
+      background: var(--input-bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: 4px; padding: 0.35rem 0.5rem; font-size: 0.75rem; font-family: inherit;
+    }
+    /* Stands in for a hidden field (see renderSubTabBar/updateFieldVisibility)
+       — same box shape as .sub-tab-content but dashed and clickable, so it
+       reads as "there's more here, click to see it" rather than empty space. */
+    .sub-tab-content-placeholder {
+      display: block; width: 100%; box-sizing: border-box;
+      background: var(--input-bg); color: var(--muted); border: 1px dashed var(--border);
+      border-radius: 4px; padding: 0.35rem 0.5rem; font-size: 0.75rem; cursor: pointer;
+    }
+    .sub-tab-content-placeholder:hover { color: var(--text); border-color: var(--accent); }
     .form-subtab {
       display: flex; align-items: center; gap: 0.3rem;
       background: var(--input-bg); color: var(--muted); border: 1px solid var(--border);
@@ -227,6 +252,10 @@
     .form-subtab.dragging { opacity: 0.4; }
     .form-subtab.drag-over { border-color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); }
     .form-subtab-add { font-weight: 700; }
+    /* The per-bar "more options" trigger (see subTabCogItems/renderSubTabBar) —
+       same pill shape as the rest, but never shows an active state since it's
+       a menu trigger rather than a tab. */
+    .form-subtab-cog { padding: 0.25rem 0.5rem; border-color: transparent; }
 
     #save-tab-editor { display: inline-flex; gap: 0.3rem; align-items: center; }
     #save-tab-editor button { padding: 0.25rem 0.5rem !important; min-width: auto !important; }
@@ -830,6 +859,8 @@
             <button type="button" onclick="applyFormat('hr')" title="Horizontal rule">&mdash;</button>
             <button type="button" onclick="applyFormat('noparse')" title="Raw text (ignore formatting)">Raw</button>
             <span class="format-toolbar-sep"></span>
+            <button type="button" onclick="addSubTabAtDepth(focusedFieldDepth + 1)" title="Split the currently visible field into sub-tabs">+ Sub-tab</button>
+            <span class="format-toolbar-sep"></span>
             <div class="dropdown-wrap blocks-dropdown-wrap">
               <button type="button" onclick="toggleBlocksDropdown(event)" title="Insert a saved block">Blocks &#9662;</button>
               <div id="blocks-dropdown" class="dropdown-menu"></div>
@@ -852,8 +883,9 @@
             </span>
             <span id="tabs-status" class="status"></span>
           </div>
-          <div class="sub-tab-bar" id="sub-tab-bar"></div>
           <textarea id="f-review-text" rows="5" placeholder="Main review text..." spellcheck="true" oninput="onReviewTextInput()"></textarea>
+          <div id="f-review-text-placeholder" class="sub-tab-content-placeholder" onclick="focusTopField()" style="display:none">[...]</div>
+          <div class="sub-tab-bar" id="sub-tab-bar"></div>
           <div id="bbcode-warnings"></div>
         </div>
       </div>
@@ -926,13 +958,36 @@ let extraTabs        = []; // [{ id, name, content }]
 let activeReviewTab  = 'steam';
 let draggedTabId     = null;
 let confirmingReviewTabDeleteId = null; // review tab id currently showing its inline "delete?" confirmation
-let activeSubTabs    = []; // [{ id, name, content }] — parsed from the active review tab's [tab=Name] blocks; empty means plain (unsplit) content
-let activeSubTabId   = null; // id of the sub-tab currently shown in the editor, or null when activeSubTabs is empty
+// [{ tabs: [{id,name,content}], activeId }, ...] — one entry per nesting
+// depth. Index 0 is the active review tab's own [tab=Name] blocks (what used
+// to be the flat activeSubTabs/activeSubTabId pair); a deeper entry is the
+// [tab=] children found inside whichever tab is active one level up. An
+// empty stack means the tab's content is plain (unsplit), shown directly in
+// #f-review-text. Once split, #f-review-text always represents the review
+// tab's own text (the part before its first [tab=] block), and each
+// subTabStack level gets its own textarea bound to whichever tab is
+// currently active AT THAT level: `tab.content` is always just that
+// specific tab's own text (see descendSubTabStack), never a level-wide
+// shared value, so clicking a different pill in a bar simply swaps that
+// bar's own textarea to show that tab's own content, same as #f-review-text
+// always did for a single unsplit tab. Every bar's pills always render, but
+// only ONE field is ever shown at a time — see focusedFieldDepth.
+let subTabStack      = [];
+// Which single field is currently visible: -1 means #f-review-text (the
+// review tab's own top-level text); 0..subTabStack.length-1 means that
+// level's own textarea. Clicking any sub-tab pill, or the format toolbar's
+// "+ Sub-tab" button, sets this to wherever you just acted — everything
+// else (every other bar's field, and #f-review-text if not -1) hides, so
+// exactly one field is visible at a time (see renderSubTabBar). Kept in
+// sync with subTabStack's actual length by clampFocusedField whenever a
+// level gets removed.
+let focusedFieldDepth = -1;
 let draggedSubTabId  = null;
-let confirmingSubTabDeleteId = null; // sub-tab id currently showing its inline "delete?" confirmation
+let confirmingSubTabDelete = null; // { depth, id } of the sub-tab currently showing its inline "delete?" confirmation, or null
+let confirmingSubTabBarDeleteDepth = null; // depth whose cog is showing the "delete all sub-tabs on this bar?" confirmation, or null
 let sitePreviewExpanded = true;
 let sitePreviewBodyTab  = 'steam';
-let sitePreviewSubTab   = 0;
+let sitePreviewSubPath  = [];
 let sitePreviewShowAllTags = false;
 let customBlocks        = []; // [{ id, name, content }] — reusable saved snippets, shared across all reviews
 let blocksSha           = null;
@@ -1723,9 +1778,7 @@ function setForm(r) {
   currentCoreTags = [...(r.coreTags || [])];
   renderTags();
   activeReviewTab = 'steam';
-  activeSubTabs = parseSubTabsForEditing(steamBody);
-  activeSubTabId = activeSubTabs[0]?.id || null;
-  set('f-review-text', activeSubTabId ? activeSubTabs[0].content : steamBody);
+  buildSubTabStack(steamBody);
   renderReviewTabs();
   renderSubTabBar();
 }
@@ -1741,8 +1794,8 @@ function clearForm() {
   currentCoreTags = [];
   renderTags();
   activeReviewTab = 'steam';
-  activeSubTabs = [];
-  activeSubTabId = null;
+  subTabStack = [];
+  focusedFieldDepth = -1;
   set('f-review-text', '');
   renderReviewTabs();
   renderSubTabBar();
@@ -1951,13 +2004,66 @@ async function confirmDeleteCustomBlock(id) {
   }
 }
 
-function syncActiveTabContent() {
-  let val = document.getElementById('f-review-text').value;
-  if (activeSubTabs.length) {
-    const sub = activeSubTabs.find(t => t.id === activeSubTabId);
-    if (sub) sub.content = val;
-    val = serializeSubTabs(activeSubTabs);
+// Serializes subTabStack[fromDepth..] bottom-up into fromDepth's active
+// tab's raw form: its own text, plus (if it has a child level) that child's
+// own serialized [tab=] blocks folded in. This is purely a computed pass —
+// it never writes back onto any tab's `.content`, which always stays just
+// that tab's own text so its own textarea keeps showing only that. Shared
+// by syncActiveTabContent (to compute the final flat steamBody) and
+// foldDeeperInto (to persist it before a branch gets truncated away).
+function combineFromDepth(fromDepth) {
+  let combined = null;
+  for (let d = subTabStack.length - 1; d >= fromDepth; d--) {
+    const level = subTabStack[d];
+    const node = level.tabs.find(t => t.id === level.activeId);
+    const ownRaw = combined === null ? node.content : (node.content.trim() ? `${node.content.trim()}\n\n${combined}` : combined);
+    combined = serializeSubTabs(level.tabs, level.activeId, ownRaw);
   }
+  return combined;
+}
+
+// The reverse of descendSubTabStack: folds everything deeper than `depth`
+// back into `depth`'s *currently* active tab's own `.content` — persistently
+// turning it from "just its own text" into the full raw blob (own text plus
+// its children's serialized [tab=] blocks) — so that tab's nested structure
+// survives once its expanded branch is truncated away instead of being
+// silently lost the next time something resyncs. Needed anywhere a branch is
+// about to be truncated but NOT deleted (switching to a sibling, adding a
+// new one) — call this before slicing subTabStack short and before
+// reassigning `activeId`, while it still points at the outgoing tab.
+function foldDeeperInto(depth) {
+  if (subTabStack.length <= depth + 1) return;
+  const childrenRaw = combineFromDepth(depth + 1);
+  const level = subTabStack[depth];
+  const node = level.tabs.find(t => t.id === level.activeId);
+  const ownText = node.content.trim();
+  node.content = ownText ? `${ownText}\n\n${childrenRaw}` : childrenRaw;
+}
+
+// Reads every level's own textarea into its active tab's `content`, then
+// combines bottom-up into the final flat raw string, finally combined with
+// #f-review-text, which always holds the review tab's own text regardless
+// of how deep subTabStack goes — clicking around sub-tabs never touches it.
+function syncActiveTabContent() {
+  const ownTopText = document.getElementById('f-review-text').value;
+  if (!subTabStack.length) {
+    if (activeReviewTab === 'steam') {
+      steamBody = ownTopText;
+    } else {
+      const tab = extraTabs.find(t => t.id === activeReviewTab);
+      if (tab) tab.content = ownTopText;
+    }
+    return { steamBody };
+  }
+
+  subTabStack.forEach((level, d) => {
+    const node = level.tabs.find(t => t.id === level.activeId);
+    const box = document.getElementById(`sub-content-${d}`);
+    if (node && box) node.content = box.value;
+  });
+
+  const raw = combineFromDepth(0);
+  const val = ownTopText.trim() ? `${ownTopText.trim()}\n\n${raw}` : raw;
   if (activeReviewTab === 'steam') {
     steamBody = val;
   } else {
@@ -1971,13 +2077,51 @@ function getActiveTabRawContent() {
   return activeReviewTab === 'steam' ? steamBody : (extraTabs.find(t => t.id === activeReviewTab)?.content || '');
 }
 
+// Descends from an already-active tab into any further nested [tab=]
+// children it has, pushing one subTabStack level per depth and stripping
+// each parent tab's `.content` down to just its own text (the nested markup
+// it had now lives in the next level's tabs instead of being duplicated).
+// Shared by buildSubTabStack, switchSubTabAtDepth, and confirmDeleteSubTab
+// wherever a specific branch needs (re)descending into.
+function descendSubTabStack(activeTab) {
+  for (;;) {
+    const childTabs = parseSubTabsForEditing(activeTab.content);
+    if (!childTabs.length) break;
+    activeTab.content = childTabs.preamble || '';
+    subTabStack.push({ tabs: childTabs, activeId: childTabs[0].id });
+    activeTab = childTabs[0];
+  }
+}
+
+// Keeps focusedFieldDepth valid after subTabStack shrinks (a level or a bar
+// gets deleted) — falls back to whatever's now the deepest remaining field,
+// or #f-review-text (-1) if nothing's left.
+function clampFocusedField() {
+  focusedFieldDepth = Math.min(focusedFieldDepth, subTabStack.length - 1);
+}
+
+// Rebuilds subTabStack from a review tab's whole raw content. #f-review-text
+// always represents the review tab's own text (everything before its first
+// top-level [tab=] block, if any) regardless of how deep the rest of the
+// content splits — used whenever a tab's raw content changes out from under
+// the editor (switching review tabs, undoing a tab delete, loading/clearing
+// the form). Defaults the visible field to the deepest branch found, same as
+// #f-review-text always representing the deepest leaf did before every
+// level got its own field.
+function buildSubTabStack(content) {
+  subTabStack = [];
+  const tabs = parseSubTabsForEditing(content);
+  if (!tabs.length) { set('f-review-text', content); focusedFieldDepth = -1; return; }
+  set('f-review-text', tabs.preamble || '');
+  subTabStack.push({ tabs, activeId: tabs[0].id });
+  descendSubTabStack(tabs[0]);
+  focusedFieldDepth = subTabStack.length - 1;
+}
+
 function switchReviewTab(id) {
   syncActiveTabContent();
   activeReviewTab = id;
-  const content = getActiveTabRawContent();
-  activeSubTabs = parseSubTabsForEditing(content);
-  activeSubTabId = activeSubTabs[0]?.id || null;
-  set('f-review-text', activeSubTabId ? activeSubTabs[0].content : content);
+  buildSubTabStack(getActiveTabRawContent());
   renderReviewTabs();
   renderSubTabBar();
   sitePreviewBodyTab = id;
@@ -1990,9 +2134,7 @@ function addReviewTab(name, content = '') {
   const id = `tab-${Date.now()}`;
   extraTabs.push({ id, name: name || `Tab ${extraTabs.length + 2}`, content });
   activeReviewTab = id;
-  activeSubTabs = parseSubTabsForEditing(content);
-  activeSubTabId = activeSubTabs[0]?.id || null;
-  set('f-review-text', activeSubTabId ? activeSubTabs[0].content : content);
+  buildSubTabStack(content);
   renderReviewTabs();
   renderSubTabBar();
   sitePreviewBodyTab = id;
@@ -2026,9 +2168,7 @@ function confirmDeleteReviewTab(id) {
   extraTabs.splice(idx, 1);
   if (activeReviewTab === id) {
     activeReviewTab = 'steam';
-    activeSubTabs = parseSubTabsForEditing(steamBody);
-    activeSubTabId = activeSubTabs[0]?.id || null;
-    set('f-review-text', activeSubTabId ? activeSubTabs[0].content : steamBody);
+    buildSubTabStack(steamBody);
     renderSubTabBar();
     sitePreviewBodyTab = 'steam';
     syncSitePreviewToActiveSubTab();
@@ -2038,70 +2178,142 @@ function confirmDeleteReviewTab(id) {
 }
 
 // ── Sub-tabs (the [tab=Name] blocks inside a single review tab's content) ─────
+// Forwards splitSubTabs's `.preamble` (shared.js) onto this function's own
+// returned array the same additive way, so buildSubTabStack/switchSubTabAtDepth
+// can read it off the same value without changing their `.length`/[0] usage.
 function parseSubTabsForEditing(content) {
   const parsed = splitSubTabs(content);
-  return parsed ? parsed.map((t, i) => ({ id: `sub-${Date.now()}-${i}`, name: t.name, content: t.content })) : [];
+  if (!parsed) return [];
+  const tabs = parsed.map((t, i) => ({ id: `sub-${Date.now()}-${i}`, name: t.name, content: t.content }));
+  tabs.preamble = parsed.preamble;
+  return tabs;
 }
 
-function serializeSubTabs(subtabs) {
-  return subtabs.map(t => `[tab=${t.name}]\n${t.content}\n[/tab]`).join('\n\n');
+// `overrideId`/`overrideContent` let a caller substitute one specific tab's
+// effective raw form (its own text plus its children's serialized [tab=]
+// blocks, folded together only for this one serialization pass) without
+// mutating that tab's `.content`, which always stays just its own text so
+// its own textarea keeps showing only that.
+function serializeSubTabs(subtabs, overrideId, overrideContent) {
+  return subtabs.map(t => `[tab=${t.name}]\n${t.id === overrideId ? overrideContent : t.content}\n[/tab]`).join('\n\n');
 }
 
-// Keeps the Site Card Preview's expanded sub-tab pointed at whatever sub-tab is
-// active in the editor — the preview's subTabs are parsed (via splitSubTabs) from
-// the same serialized content in the same order, so index lookup by id lines up.
+// Keeps the Site Card Preview's expanded sub-tab path pointed at whatever
+// branch is active in the editor — the preview's levels are parsed (via
+// splitSubTabs) from the same serialized content in the same order, so
+// index lookup by id lines up at every depth.
 function syncSitePreviewToActiveSubTab() {
   sitePreviewExpanded = true;
-  sitePreviewSubTab = Math.max(0, activeSubTabs.findIndex(t => t.id === activeSubTabId));
+  sitePreviewSubPath = subTabStack.map(level => Math.max(0, level.tabs.findIndex(t => t.id === level.activeId)));
 }
 
-function switchSubTab(id) {
-  if (id === activeSubTabId) return;
-  syncActiveTabContent();
-  activeSubTabId = id;
-  const tab = activeSubTabs.find(t => t.id === id);
-  set('f-review-text', tab?.content || '');
-  renderSubTabBar();
-  syncSitePreviewToActiveSubTab();
-  updatePreview();
-}
-
-function addSubTab() {
-  syncActiveTabContent();
-  if (!activeSubTabs.length) {
-    const existing = getActiveTabRawContent();
-    if (existing.trim()) activeSubTabs = [{ id: `sub-${Date.now()}`, name: 'Tab 1', content: existing }];
+// Switches the active sub-tab at a given depth: this bar's own textarea
+// simply swaps to that tab's own content, exactly like #f-review-text
+// always did for a single unsplit tab, and becomes the one visible field
+// (see focusedFieldDepth) — every other bar's field, and #f-review-text,
+// hide. Cascade-syncs first (so whatever branch is being left is saved),
+// folds any deeper levels back into the outgoing tab's own content
+// (foldDeeperInto — they belonged to the branch we're switching away from,
+// and would otherwise be lost once dropped, not just hidden), then descends
+// into the newly active tab's own children — if it has any — down to a
+// leaf, same as buildSubTabStack does for a whole tab (their pills render,
+// but their fields stay hidden until clicked into directly). Clicking a
+// pill that's already this bar's active tab (its own field just isn't the
+// one focused right now, because a different bar is) still needs to bring
+// this bar's field into focus — it can't fall through to the "nothing
+// changed" early return just because the active tab itself didn't change.
+function switchSubTabAtDepth(depth, id) {
+  const level = subTabStack[depth];
+  if (!level) return;
+  if (id === level.activeId) {
+    if (focusedFieldDepth !== depth) {
+      focusedFieldDepth = depth;
+      renderSubTabBar();
+      renderBBCodeWarnings();
+    }
+    return;
   }
-  const id = `sub-${Date.now()}-${activeSubTabs.length}`;
-  activeSubTabs.push({ id, name: `Tab ${activeSubTabs.length + 1}`, content: '' });
-  activeSubTabId = id;
-  set('f-review-text', '');
+  syncActiveTabContent();
+  foldDeeperInto(depth);
+  subTabStack = subTabStack.slice(0, depth + 1);
+  level.activeId = id;
+  descendSubTabStack(level.tabs.find(t => t.id === id));
+  focusedFieldDepth = depth;
+  renderSubTabBar();
+  syncSitePreviewToActiveSubTab();
+  updatePreview();
+}
+
+// Adds a sub-tab at the given depth. When `depth` is one past the end of the
+// current stack, this starts a brand-new bar+textarea below whatever's above
+// it (the review tab's own #f-review-text, or the parent level's own active
+// tab) — that existing text is never touched or moved, only ever a new blank
+// Tab 1 appears beneath it. Otherwise (an existing level) it's adding
+// another sibling, which also switches focus to the new blank tab, folding
+// anything nested more deeply under the previously active tab back into its
+// own content first (foldDeeperInto) so that branch isn't lost, just no
+// longer expanded. Either way the new tab's field becomes the one visible
+// field (see focusedFieldDepth) — this is what the format toolbar's
+// "+ Sub-tab" button calls, always targeting focusedFieldDepth + 1, i.e.
+// directly below whatever's currently visible.
+function addSubTabAtDepth(depth) {
+  syncActiveTabContent();
+  foldDeeperInto(depth);
+  if (!subTabStack[depth]) {
+    subTabStack[depth] = { tabs: [], activeId: null };
+  }
+  const level = subTabStack[depth];
+  const id = `sub-${Date.now()}-${level.tabs.length}`;
+  level.tabs.push({ id, name: `Tab ${level.tabs.length + 1}`, content: '' });
+  level.activeId = id;
+  subTabStack = subTabStack.slice(0, depth + 1);
+  focusedFieldDepth = depth;
   renderSubTabBar();
   syncActiveTabContent();
   syncSitePreviewToActiveSubTab();
   updatePreview();
 }
 
-function startDeleteSubTab(e, id) {
+function startDeleteSubTab(e, depth, id) {
   e.stopPropagation();
-  confirmingSubTabDeleteId = id;
+  confirmingSubTabDelete = { depth, id };
   renderSubTabBar();
 }
 
 function cancelDeleteSubTab() {
-  confirmingSubTabDeleteId = null;
+  confirmingSubTabDelete = null;
   renderSubTabBar();
 }
 
-function confirmDeleteSubTab(id) {
-  confirmingSubTabDeleteId = null;
-  const idx = activeSubTabs.findIndex(t => t.id === id);
+// Removes an entire level and everything nested under it. The bar and
+// textarea above it (the review tab's own #f-review-text, or the parent
+// level's own active tab) were never touched by this level's existence in
+// the first place, so there's nothing to restore — just drop it.
+function collapseSubTabLevel(depth) {
+  subTabStack = subTabStack.slice(0, depth);
+  clampFocusedField();
+}
+
+function confirmDeleteSubTab(depth, id) {
+  confirmingSubTabDelete = null;
+  const level = subTabStack[depth];
+  if (!level) { renderSubTabBar(); return; }
+  const idx = level.tabs.findIndex(t => t.id === id);
   if (idx === -1) { renderSubTabBar(); return; }
 
-  activeSubTabs.splice(idx, 1);
-  if (activeSubTabId === id) {
-    activeSubTabId = activeSubTabs[0]?.id || null;
-    set('f-review-text', activeSubTabs[0]?.content || '');
+  level.tabs.splice(idx, 1);
+  if (!level.tabs.length) {
+    // No sub-tabs left at this depth — collapse the level entirely instead
+    // of leaving an empty pill row behind. This is what actually lets you
+    // undo a split by deleting tabs one at a time.
+    collapseSubTabLevel(depth);
+  } else if (level.activeId === id) {
+    level.activeId = level.tabs[0].id;
+    // The deleted tab's own nested levels (if any) go with it — descend
+    // back into whatever the newly active tab has, if anything.
+    subTabStack = subTabStack.slice(0, depth + 1);
+    descendSubTabStack(level.tabs[0]);
+    focusedFieldDepth = depth;
   }
   renderSubTabBar();
   syncActiveTabContent();
@@ -2109,21 +2321,48 @@ function confirmDeleteSubTab(id) {
   updatePreview();
 }
 
-function reorderSubTabs(draggedId, targetId) {
-  const fromIdx = activeSubTabs.findIndex(t => t.id === draggedId);
-  const toIdx = activeSubTabs.findIndex(t => t.id === targetId);
-  if (fromIdx === -1 || toIdx === -1) return;
-  const [moved] = activeSubTabs.splice(fromIdx, 1);
-  activeSubTabs.splice(toIdx, 0, moved);
+// Bar-wide counterpart to confirmDeleteSubTab's one-tab-at-a-time deletion —
+// removes every sub-tab on this bar (and anything nested deeper under them)
+// in one action via the cog dropdown. Only refreshes that one dropdown's own
+// content (not the whole bar via renderSubTabBar) so it stays open across
+// the confirm step, matching the codebase's other inline "delete?" prompts.
+function startDeleteSubTabBar(depth) {
+  confirmingSubTabBarDeleteDepth = depth;
+  renderSubTabCogDropdown(depth);
+}
+
+function cancelDeleteSubTabBar() {
+  const depth = confirmingSubTabBarDeleteDepth;
+  confirmingSubTabBarDeleteDepth = null;
+  if (depth !== null) renderSubTabCogDropdown(depth);
+}
+
+function confirmDeleteSubTabBar(depth) {
+  confirmingSubTabBarDeleteDepth = null;
+  collapseSubTabLevel(depth);
   renderSubTabBar();
   syncActiveTabContent();
   syncSitePreviewToActiveSubTab();
   updatePreview();
 }
 
-function startRenameSubTab(e, id) {
+function reorderSubTabs(depth, draggedId, targetId) {
+  const level = subTabStack[depth];
+  if (!level) return;
+  const fromIdx = level.tabs.findIndex(t => t.id === draggedId);
+  const toIdx = level.tabs.findIndex(t => t.id === targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const [moved] = level.tabs.splice(fromIdx, 1);
+  level.tabs.splice(toIdx, 0, moved);
+  renderSubTabBar();
+  syncActiveTabContent();
+  syncSitePreviewToActiveSubTab();
+  updatePreview();
+}
+
+function startRenameSubTab(e, depth, id) {
   e.stopPropagation();
-  const tab = activeSubTabs.find(t => t.id === id);
+  const tab = subTabStack[depth]?.tabs.find(t => t.id === id);
   if (!tab) return;
   const oldBtn = e.target.closest('.form-subtab');
   if (!oldBtn) return;
@@ -2152,7 +2391,7 @@ function startRenameSubTab(e, id) {
   const closeBtn = document.createElement('span');
   closeBtn.className = 'form-tab-close';
   closeBtn.textContent = '×';
-  closeBtn.onclick = ev => startDeleteSubTab(ev, id);
+  closeBtn.onclick = ev => startDeleteSubTab(ev, depth, id);
 
   wrapper.appendChild(input);
   wrapper.appendChild(closeBtn);
@@ -2161,65 +2400,170 @@ function startRenameSubTab(e, id) {
   input.select();
 }
 
+// Shows/hides #f-review-text depending on focusedFieldDepth, swapping in its
+// own "[...]" placeholder (see the HTML) when it's not focused — the
+// per-level fields inside #sub-tab-bar aren't even created unless they're
+// the focused one (see renderSubTabBar's own "[...]" rows), but
+// #f-review-text is a static element that always exists, so its visibility
+// has to be toggled directly instead.
+function updateFieldVisibility() {
+  const field = document.getElementById('f-review-text');
+  const placeholder = document.getElementById('f-review-text-placeholder');
+  const focused = focusedFieldDepth === -1;
+  if (field) field.style.display = focused ? '' : 'none';
+  if (placeholder) placeholder.style.display = focused ? 'none' : '';
+}
+
+// Brings #f-review-text back into focus — the counterpart to clicking a
+// "[...]" placeholder row for a subTabStack level (see renderSubTabBar).
+function focusTopField() {
+  if (focusedFieldDepth === -1) return;
+  focusedFieldDepth = -1;
+  renderSubTabBar();
+  renderBBCodeWarnings();
+}
+
+// Renders one stacked level per subTabStack depth (each reusing the same
+// .form-subtab pill markup/wiring as the top level always had), each ending
+// in a cog dropdown (see subTabCogItems) for deleting that whole bar.
+// Pills always render regardless of depth, but only ONE field is ever shown
+// across the whole editor — #f-review-text at -1, or whichever subTabStack
+// depth matches focusedFieldDepth. Every other level gets a "[...]"
+// placeholder row instead of its real textarea — clicking it just brings
+// that field into focus (switchSubTabAtDepth already treats "click the
+// already-active tab" as a pure focus change), so it's always obvious which
+// field is the visible one and there's a one-click way back to any hidden
+// one. Nesting further now happens via the format toolbar's "+ Sub-tab"
+// button (see addSubTabAtDepth), not a per-bar control.
 function renderSubTabBar() {
   const el = document.getElementById('sub-tab-bar');
   if (!el) return;
+  el.innerHTML = '';
+  updateFieldVisibility();
 
-  if (!activeSubTabs.length) {
-    el.innerHTML = `<button type="button" class="form-subtab form-subtab-add" onclick="addSubTab()" title="Split this tab's body into sub-tabs">+ Sub-tab</button>`;
-    return;
-  }
+  subTabStack.forEach((level, depth) => {
+    const levelWrap = document.createElement('div');
+    levelWrap.className = `sub-tab-level${depth > 0 ? ' sub-tab-level-nested' : ''}`;
 
-  const tabsHtml = activeSubTabs.map(t => confirmingSubTabDeleteId === t.id ? `
-    <span class="form-subtab form-tab-confirm">
-      ${deleteConfirmRow(t.name, `confirmDeleteSubTab('${t.id}')`, `cancelDeleteSubTab()`)}
-    </span>
-  ` : `
-    <button type="button" class="form-subtab ${activeSubTabId === t.id ? 'active' : ''}" data-subtab-id="${escHtml(t.id)}" draggable="true">
-      <span class="form-tab-label">${escHtml(t.name)}</span>
-      <span class="form-tab-close" onclick="startDeleteSubTab(event, '${t.id}')">&times;</span>
-    </button>
-  `).join('');
+    const row = document.createElement('div');
+    row.className = 'sub-tab-bar';
 
-  el.innerHTML = `
-    ${tabsHtml}
-    <button type="button" class="form-subtab form-subtab-add" onclick="addSubTab()" title="Add a sub-tab">+</button>
-  `;
+    const tabsHtml = level.tabs.map(t => (confirmingSubTabDelete?.depth === depth && confirmingSubTabDelete?.id === t.id) ? `
+      <span class="form-subtab form-tab-confirm">
+        ${deleteConfirmRow(t.name, `confirmDeleteSubTab(${depth}, '${t.id}')`, `cancelDeleteSubTab()`)}
+      </span>
+    ` : `
+      <button type="button" class="form-subtab ${level.activeId === t.id ? 'active' : ''}" data-subtab-id="${escHtml(t.id)}" draggable="true">
+        <span class="form-tab-label">${escHtml(t.name)}</span>
+        <span class="form-tab-close" onclick="startDeleteSubTab(event, ${depth}, '${t.id}')">&times;</span>
+      </button>
+    `).join('');
 
-  el.querySelectorAll('.form-subtab[data-subtab-id]').forEach(btn => {
-    const id = btn.dataset.subtabId;
+    row.innerHTML = `
+      ${tabsHtml}
+      <button type="button" class="form-subtab form-subtab-add" onclick="addSubTabAtDepth(${depth})" title="Add a sub-tab">+</button>
+      <div class="dropdown-wrap sub-tab-cog-wrap">
+        <button type="button" class="form-subtab form-subtab-cog" onclick="toggleSubTabCogDropdown(event, ${depth})" title="More options">&#9881;</button>
+        <div id="sub-tab-cog-dropdown-${depth}" class="dropdown-menu sub-tab-cog-dropdown">${subTabCogItems(depth)}</div>
+      </div>
+    `;
+    levelWrap.appendChild(row);
 
-    btn.addEventListener('click', e => {
-      if (e.target.closest('.form-tab-close') || e.target.closest('.form-tab-rename-input')) return;
-      switchSubTab(id);
-    });
-    btn.addEventListener('dblclick', e => {
-      if (e.target.closest('.form-tab-close') || e.target.closest('.form-tab-rename-input')) return;
-      startRenameSubTab(e, id);
-    });
+    const activeTab = level.tabs.find(t => t.id === level.activeId);
+    if (depth === focusedFieldDepth) {
+      const contentBox = document.createElement('textarea');
+      contentBox.className = 'sub-tab-content';
+      contentBox.id = `sub-content-${depth}`;
+      contentBox.rows = 4;
+      contentBox.value = activeTab.content || '';
+      contentBox.oninput = () => { syncActiveTabContent(); updatePreview(); };
+      levelWrap.appendChild(contentBox);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'sub-tab-content-placeholder';
+      placeholder.textContent = '[...]';
+      placeholder.title = 'Click to switch to this field';
+      placeholder.onclick = () => switchSubTabAtDepth(depth, activeTab.id);
+      levelWrap.appendChild(placeholder);
+    }
 
-    btn.addEventListener('dragstart', e => {
-      draggedSubTabId = id;
-      e.dataTransfer.effectAllowed = 'move';
-      requestAnimationFrame(() => btn.classList.add('dragging'));
-    });
-    btn.addEventListener('dragend', () => {
-      draggedSubTabId = null;
-      el.querySelectorAll('.form-subtab').forEach(b => b.classList.remove('dragging', 'drag-over'));
-    });
-    btn.addEventListener('dragover', e => {
-      if (!draggedSubTabId || draggedSubTabId === id) return;
-      e.preventDefault();
-      btn.classList.add('drag-over');
-    });
-    btn.addEventListener('dragleave', () => btn.classList.remove('drag-over'));
-    btn.addEventListener('drop', e => {
-      e.preventDefault();
-      btn.classList.remove('drag-over');
-      if (!draggedSubTabId || draggedSubTabId === id) return;
-      reorderSubTabs(draggedSubTabId, id);
+    el.appendChild(levelWrap);
+
+    row.querySelectorAll('.form-subtab[data-subtab-id]').forEach(btn => {
+      const id = btn.dataset.subtabId;
+
+      btn.addEventListener('click', e => {
+        if (e.target.closest('.form-tab-close') || e.target.closest('.form-tab-rename-input')) return;
+        switchSubTabAtDepth(depth, id);
+      });
+      btn.addEventListener('dblclick', e => {
+        if (e.target.closest('.form-tab-close') || e.target.closest('.form-tab-rename-input')) return;
+        startRenameSubTab(e, depth, id);
+      });
+
+      btn.addEventListener('dragstart', e => {
+        draggedSubTabId = id;
+        e.dataTransfer.effectAllowed = 'move';
+        requestAnimationFrame(() => btn.classList.add('dragging'));
+      });
+      btn.addEventListener('dragend', () => {
+        draggedSubTabId = null;
+        row.querySelectorAll('.form-subtab').forEach(b => b.classList.remove('dragging', 'drag-over'));
+      });
+      btn.addEventListener('dragover', e => {
+        if (!draggedSubTabId || draggedSubTabId === id) return;
+        e.preventDefault();
+        btn.classList.add('drag-over');
+      });
+      btn.addEventListener('dragleave', () => btn.classList.remove('drag-over'));
+      btn.addEventListener('drop', e => {
+        e.preventDefault();
+        btn.classList.remove('drag-over');
+        if (!draggedSubTabId || draggedSubTabId === id) return;
+        reorderSubTabs(depth, draggedSubTabId, id);
+      });
     });
   });
+}
+
+// Builds the cog dropdown's contents for one bar: "+ Sub-tab" nests under
+// THIS bar's own active tab specifically (addSubTabAtDepth(depth + 1)) —
+// same call the format toolbar's "+ Sub-tab" button makes for whichever
+// field is currently focused, just reachable directly from any bar without
+// having to click into it first — and "Delete all sub-tabs" removes this
+// whole bar. "Delete all sub-tabs" swaps this dropdown's contents for an
+// inline confirm row (deleteConfirmRow) rather than closing it, mirroring
+// every other destructive action in this file (see "No native browser
+// dialogs" — no confirm()/alert()).
+function subTabCogItems(depth) {
+  if (confirmingSubTabBarDeleteDepth === depth) {
+    return `<div class="dropdown-item dropdown-item-confirm">${deleteConfirmRow('all sub-tabs', `confirmDeleteSubTabBar(${depth})`, 'cancelDeleteSubTabBar()')}</div>`;
+  }
+  return `
+    <div class="dropdown-item" onclick="addSubTabAtDepth(${depth + 1}); closeAllSubTabCogDropdowns();">+ Sub-tab</div>
+    <div class="dropdown-item" onclick="event.stopPropagation(); startDeleteSubTabBar(${depth})">Delete all sub-tabs</div>
+  `;
+}
+
+// Refreshes just one bar's cog dropdown content in place (used by the
+// "Delete all sub-tabs" confirm/cancel step so the dropdown stays open,
+// rather than the full renderSubTabBar() rebuilding — and closing — it).
+function renderSubTabCogDropdown(depth) {
+  const el = document.getElementById(`sub-tab-cog-dropdown-${depth}`);
+  if (el) el.innerHTML = subTabCogItems(depth);
+}
+
+function toggleSubTabCogDropdown(e, depth) {
+  e.stopPropagation();
+  const el = document.getElementById(`sub-tab-cog-dropdown-${depth}`);
+  const willOpen = !el.classList.contains('open');
+  closeAllSubTabCogDropdowns();
+  if (willOpen) el.classList.add('open');
+}
+
+function closeAllSubTabCogDropdowns() {
+  document.querySelectorAll('.sub-tab-cog-dropdown').forEach(d => d.classList.remove('open'));
+  confirmingSubTabBarDeleteDepth = null;
 }
 
 function startRenameTab(e, id) {
@@ -2991,9 +3335,13 @@ function diffTabContent(label, oldContent, newContent) {
 
   const oldMap = new Map(oldSubs ? oldSubs.map(s => [s.name, s.content]) : []);
   const newMap = new Map(newSubs ? newSubs.map(s => [s.name, s.content]) : []);
+  // Recurse per matched-name child instead of reporting the whole level, so a
+  // change buried several [tab=] levels deep chains its full path (e.g.
+  // "Tab: Pros & Cons — Combat — Weapons") — falling back to `label` alone,
+  // same as the no-sub-tabs case above, whenever a level's own diff can't be
+  // pinned on any single child (e.g. a pure reorder).
   const changed = [...new Set([...oldMap.keys(), ...newMap.keys()])]
-    .filter(name => oldMap.get(name) !== newMap.get(name))
-    .map(name => `${label} — ${name}`);
+    .flatMap(name => diffTabContent(`${label} — ${name}`, oldMap.get(name), newMap.get(name)));
   return changed.length ? changed : [label];
 }
 
@@ -3394,9 +3742,17 @@ function validateBBCode(text) {
   return issues;
 }
 
+// Validates whichever field is currently focused (see focusedFieldDepth) —
+// #f-review-text, or whichever sub-tab bar's own field is showing — never
+// a hidden one. #bbcode-warnings sits at the very bottom of the stack
+// (see the HTML) rather than immediately under a specific field, since
+// exactly one field is ever visible at a time anyway, so it's unambiguous
+// which one the warnings describe.
 function renderBBCodeWarnings() {
   const el = document.getElementById('bbcode-warnings');
-  const issues = validateBBCode(document.getElementById('f-review-text').value);
+  const fieldId = focusedFieldDepth === -1 ? 'f-review-text' : `sub-content-${focusedFieldDepth}`;
+  const field = document.getElementById(fieldId);
+  const issues = field ? validateBBCode(field.value) : [];
   el.textContent = issues.length ? '⚠ ' + issues.join(' · ') : '';
 }
 
@@ -3406,7 +3762,7 @@ function renderSitePreview(r) {
   document.getElementById('site-preview').innerHTML = renderCard(r, {
     expanded,
     activeTabId: sitePreviewBodyTab,
-    activeSubIndex: sitePreviewSubTab,
+    activeSubPath: sitePreviewSubPath,
     permalinkHref: r.id ? siteReviewUrl(r.id) : null,
     disablePermalinkNav: true,
     tagRegistry,
@@ -3437,8 +3793,9 @@ function renderSitePreview(r) {
   document.querySelectorAll('#site-preview .sub-tab').forEach(btn => {
     btn.onclick = e => {
       e.stopPropagation();
-      const sub = activeSubTabs[Number(btn.dataset.subTab)];
-      if (sub) switchSubTab(sub.id);
+      const depth = Number(btn.dataset.subLevel);
+      const sub = subTabStack[depth]?.tabs[Number(btn.dataset.subTab)];
+      if (sub) switchSubTabAtDepth(depth, sub.id);
     };
   });
   // Same "+"/"−" toggle as the live site (see app.js) — expands the preview
@@ -3600,9 +3957,7 @@ function confirmImportReview() {
   }));
 
   activeReviewTab = 'steam';
-  activeSubTabs = parseSubTabsForEditing(steamBody);
-  activeSubTabId = activeSubTabs[0]?.id || null;
-  set('f-review-text', activeSubTabId ? activeSubTabs[0].content : steamBody);
+  buildSubTabStack(steamBody);
   renderReviewTabs();
   renderSubTabBar();
   sitePreviewBodyTab = 'steam';
@@ -3896,6 +4251,9 @@ function b64decode(b64) {
     }
     if (!e.target.closest('.manage-tags-wrap')) {
       closeManageTagsDropdown();
+    }
+    if (!e.target.closest('.sub-tab-cog-wrap')) {
+      closeAllSubTabCogDropdowns();
     }
   });
 

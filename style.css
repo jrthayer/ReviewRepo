@@ -527,6 +527,13 @@ header {
   margin-bottom: 1rem;
 }
 
+/* Shared intro text shown above a level's sub-tabs pill row regardless of
+   which sub-tab is active (renderSubTabLevel, shared.js) — same spacing
+   rhythm as .sub-tabs itself below it. */
+.sub-tabs-preamble {
+  margin-bottom: 0.75rem;
+}
+
 .sub-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -551,6 +558,17 @@ header {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+
+/* A sub-tab of a sub-tab (renderSubTabLevel, shared.js) — slightly smaller
+   so a stack of these rows reads as a hierarchy rather than duplicate tab
+   bars. */
+.sub-tabs-nested {
+  margin-bottom: 0.6rem;
+}
+.sub-tabs-nested .sub-tab {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.55rem;
 }
 
 .expanded-body .bb-h1 {

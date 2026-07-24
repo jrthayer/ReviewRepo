@@ -120,15 +120,40 @@ function formatDate(str) {
   return new Date(`${str}T00:00:00`).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+// Splits the *immediate* [tab=Name]...[/tab] children out of raw content.
+// Depth-aware (tracks nesting via a running counter) rather than a single
+// non-greedy regex, so a [tab=] block nested inside another one is matched by
+// its own closing tag instead of the first [/tab] encountered. Any further
+// [tab=] markup inside a child's content is left untouched — recursion is the
+// caller's job (see renderSubTabLevel in this file, or the admin editor's
+// subTabStack), which is what lets sub-tabs nest to arbitrary depth.
+//
+// Any text before the first top-level [tab=] is attached as a `.preamble`
+// property on the returned array rather than a separate return value — an
+// array is still an object, so this is additive: every existing caller that
+// does .length/.map/.find/`if (!parsed)` keeps working untouched, and only
+// code that wants the shared intro text needs to read `.preamble`.
 function splitSubTabs(raw) {
   if (!raw) return null;
-  const re = /\[tab=([^\]]+)\]([\s\S]*?)\[\/tab\]/gi;
+  const tokenRe = /\[tab=([^\]]+)\]|\[\/tab\]/gi;
   const tabs = [];
-  let m;
-  while ((m = re.exec(raw))) {
-    tabs.push({ name: m[1].trim(), content: m[2].trim() });
+  let depth = 0, name = null, contentStart = -1, firstOpenIndex = -1, m;
+  while ((m = tokenRe.exec(raw))) {
+    if (m[1] !== undefined) {
+      if (depth === 0) {
+        name = m[1].trim();
+        contentStart = tokenRe.lastIndex;
+        if (firstOpenIndex === -1) firstOpenIndex = m.index;
+      }
+      depth++;
+    } else if (depth > 0) {
+      depth--;
+      if (depth === 0) tabs.push({ name, content: raw.slice(contentStart, m.index).trim() });
+    }
   }
-  return tabs.length ? tabs : null;
+  if (!tabs.length) return null;
+  tabs.preamble = raw.slice(0, firstOpenIndex).trim();
+  return tabs;
 }
 
 function renderBBCode(raw) {
@@ -254,6 +279,27 @@ function renderFullTagList(tagNames, tagRegistry = [], tagCategories = []) {
   </div>`).join('')}</div>`;
 }
 
+// Renders one [tab=Name] level of a review tab's content, recursing into the
+// active child's own content for as many levels as it keeps splitting into
+// further [tab=] blocks (see splitSubTabs above) — a sub-tab of a sub-tab
+// just falls out of calling this again on activeSub.content. `path` is an
+// array of per-depth active indices (opts.activeSubPath on renderCard);
+// missing/out-of-range depths default to index 0, same as the old scalar
+// activeSubIndex did for the single level this replaces.
+function renderSubTabLevel(content, path, depth = 0) {
+  const subTabs = splitSubTabs(content);
+  if (!subTabs) return renderBBCode(content);
+  const idx = Math.min(path[depth] ?? 0, subTabs.length - 1);
+  const active = subTabs[idx];
+  return `
+    ${subTabs.preamble ? `<div class="sub-tabs-preamble">${renderBBCode(subTabs.preamble)}</div>` : ''}
+    <div class="sub-tabs${depth > 0 ? ' sub-tabs-nested' : ''}">
+      ${subTabs.map((st, i) => `<button type="button" class="sub-tab ${i === idx ? 'active' : ''}" data-sub-level="${depth}" data-sub-tab="${i}">${escHtml(st.name)}</button>`).join('')}
+    </div>
+    ${renderSubTabLevel(active.content, path, depth + 1)}
+  `;
+}
+
 // Renders one review card's full markup (collapsed or expanded), used both for
 // the live site's card list and the admin tool's "Site Card Preview". Each
 // caller wires up its own click/expand behavior on top of this HTML, since
@@ -263,7 +309,7 @@ function renderCard(r, opts = {}) {
   const {
     expanded = false,
     activeTabId = 'steam',
-    activeSubIndex = 0,
+    activeSubPath = [],
     permalinkHref = null,
     disablePermalinkNav = false,
     tagRegistry = [],
@@ -277,8 +323,6 @@ function renderCard(r, opts = {}) {
     ...(r.tabs || []).filter(t => t.content),
   ];
   const activeTab = bodyTabs.find(t => t.id === activeTabId) || bodyTabs[0];
-  const subTabs   = expanded ? splitSubTabs(activeTab.content) : null;
-  const activeSub = subTabs ? subTabs[Math.min(activeSubIndex, subTabs.length - 1)] : null;
 
   return `
     <div class="card ${expanded ? 'expanded' : ''}" data-id="${escHtml(r.id)}">
@@ -299,12 +343,7 @@ function renderCard(r, opts = {}) {
         <div class="card-expanded">
           <div class="expanded-body">
             ${showAllTags ? renderFullTagList(r.tags, tagRegistry, tagCategories) : ''}
-            ${subTabs ? `
-              <div class="sub-tabs">
-                ${subTabs.map((st, i) => `<button type="button" class="sub-tab ${i === activeSubIndex ? 'active' : ''}" data-sub-tab="${i}">${escHtml(st.name)}</button>`).join('')}
-              </div>
-              ${renderBBCode(activeSub.content)}
-            ` : renderBBCode(activeTab.content)}
+            ${renderSubTabLevel(activeTab.content, activeSubPath)}
           </div>
           ${r.pros?.length ? `
             <section>

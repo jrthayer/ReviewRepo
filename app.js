@@ -39,7 +39,11 @@ let dateField = 'released';
 // of dateSort/dateField.
 let dateRangeFrom, dateRangeTo;
 let expandedBodyTab = 'steam';
-let expandedSubTab = 0;
+// Per-depth active sub-tab index — [] means every level defaults to its
+// first sub-tab. A nested sub-tab is just a deeper entry in this array
+// (see renderSubTabLevel, shared.js), so switching a shallower level
+// truncates anything deeper back to default (see the .sub-tab handler below).
+let expandedSubPath = [];
 let showAllTags = false;
 
 // Advances a tri-state filter value (undefined -> 'include' -> 'exclude' ->
@@ -696,7 +700,7 @@ function render() {
   app.innerHTML = visible.map(r => renderCard(r, {
     expanded: expandedId === r.id,
     activeTabId: expandedBodyTab,
-    activeSubIndex: expandedSubTab,
+    activeSubPath: expandedSubPath,
     // Built from SITE_ROOT rather than a plain relative path so it's still
     // correct when the current visible URL is itself already .../review/<id>
     // (see index.html's bootstrap script) — a bare "review/xyz" would
@@ -720,7 +724,7 @@ function render() {
       reRenderPreservingCardPosition(id, () => {
         expandedId = expandedId === id ? null : id;
         expandedBodyTab = 'steam';
-        expandedSubTab = 0;
+        expandedSubPath = [];
         showAllTags = false;
       });
     });
@@ -732,7 +736,7 @@ function render() {
       if (btn.dataset.reviewTab === expandedBodyTab) return;
       reRenderPreservingCardPosition(btn.closest('.card').dataset.id, () => {
         expandedBodyTab = btn.dataset.reviewTab;
-        expandedSubTab = 0;
+        expandedSubPath = [];
       });
     });
   });
@@ -740,10 +744,14 @@ function render() {
   app.querySelectorAll('.sub-tab').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
+      const depth = Number(btn.dataset.subLevel);
       const idx = Number(btn.dataset.subTab);
-      if (idx === expandedSubTab) return;
+      if (expandedSubPath[depth] === idx) return;
       reRenderPreservingCardPosition(btn.closest('.card').dataset.id, () => {
-        expandedSubTab = idx;
+        // Truncate first: switching a shallower level invalidates whatever
+        // was selected deeper in the previous branch (see expandedSubPath above).
+        expandedSubPath = expandedSubPath.slice(0, depth);
+        expandedSubPath[depth] = idx;
       });
     });
   });
@@ -760,7 +768,7 @@ function render() {
         if (expandedId !== id) {
           expandedId = id;
           expandedBodyTab = 'steam';
-          expandedSubTab = 0;
+          expandedSubPath = [];
           showAllTags = true;
         } else {
           showAllTags = !showAllTags;
