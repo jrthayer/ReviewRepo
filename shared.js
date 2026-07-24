@@ -353,6 +353,7 @@ function renderCard(r, opts = {}) {
       ${expanded ? `
         <div class="card-expanded">
           <div class="expanded-body">
+            <h3 class="mobile-tab-heading">${escHtml(activeTab.name)}</h3>
             ${showAllTags ? renderFullTagList(r.tags, tagRegistry, tagCategories) : ''}
             ${renderSubTabLevel(activeTab.content, activeSubPath)}
           </div>
@@ -376,7 +377,7 @@ function renderCard(r, opts = {}) {
               <a href="${escHtml(permalinkHref)}" onclick="${disablePermalinkNav ? 'event.preventDefault();' : ''}event.stopPropagation()">${SITE_LINK_TEXT}</a>
             </div>` : ''}
           <div class="review-tabs">
-            ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${escHtml(t.id)}">${escHtml(t.name)}</button>`).join('')}
+            ${bodyTabs.map(t => `<button type="button" class="review-tab ${activeTab.id === t.id ? 'active' : ''}" data-review-tab="${escHtml(t.id)}"><span class="review-tab-label">${escHtml(t.name)}</span></button>`).join('')}
           </div>
         </div>
       ` : ''}

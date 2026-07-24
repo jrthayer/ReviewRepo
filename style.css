@@ -527,6 +527,14 @@ header {
   margin-bottom: 1rem;
 }
 
+/* Hidden by default — the active tab's own name is already readable on the
+   .review-tab pill itself at desktop widths. Shown at mobile widths instead,
+   where .review-tab-label gets hidden because multi-word tab names wrap
+   inside their own narrow pill otherwise (see the mobile breakpoint below). */
+.mobile-tab-heading {
+  display: none;
+}
+
 /* Shared intro text shown above a level's sub-tabs pill row regardless of
    which sub-tab is active (renderSubTabLevel, shared.js) — same spacing
    rhythm as .sub-tabs itself below it. */
@@ -754,4 +762,120 @@ header {
   text-align: center;
   margin-top: 4rem;
   font-size: 1rem;
+}
+
+/* ── Mobile (≤640px) — see docs/plans/mobile-support.md ── */
+
+@media (max-width: 640px) {
+  /* .review-tab (book-index tabs) has no white-space:nowrap, so a
+     multi-word tab name wraps inside its own narrow pill at this width,
+     ballooning the whole .review-tabs row. Emptying the pills and showing
+     the name as .mobile-tab-heading instead (see renderCard, shared.js)
+     keeps them as clickable, appropriately-highlighted tabs without the
+     wrapped text. */
+  .review-tab-label {
+    display: none;
+  }
+
+  /* Without the label, .review-tab shrinks to just its padding/border — big
+     enough to notice but too small to comfortably tap. Pad it out to a
+     proper touch-target size instead. */
+  .review-tab {
+    min-width: 3.5rem;
+    min-height: 2rem;
+  }
+
+  /* With the name hidden, number the pills in order (1, 2, 3…) instead of
+     leaving them blank, so there's still some way to tell them apart at a
+     glance before tapping one. */
+  .review-tabs {
+    counter-reset: review-tab;
+  }
+  .review-tab {
+    counter-increment: review-tab;
+  }
+  .review-tab::before {
+    content: counter(review-tab);
+  }
+
+  .mobile-tab-heading {
+    display: block;
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0 0 0.75rem;
+  }
+
+  /* #sort-controls' own flex-wrap and #recommend-filter-row's wrap around it
+     pack unevenly at this width (e.g. the Year select stranding alone with
+     empty space beside it). A deliberate two-column grid instead pairs
+     Playtime/Price, Release Date/Year, and Recommended/Tags on their own
+     lines regardless of each control's natural content width — flex-wrap
+     can't guarantee that pairing, grid placement can. Also gives the whole
+     row some breathing room off the screen edges, which it had none of
+     before (unlike #title-search-bar/#app, which already pad themselves). */
+  #recommend-filter-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    padding: 0 1rem;
+  }
+
+  /* Its own three rows (Sort By / Playtime+Price / Release Date+Year), so it
+     spans both of #recommend-filter-row's columns rather than sitting in one. */
+  #recommend-filter-row > #sort-controls {
+    grid-column: 1 / -1;
+  }
+
+  #sort-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  #sort-controls > .tag-group-label {
+    grid-column: 1 / -1;
+  }
+
+  /* Unlike the buttons beside it, a <select>'s own text renders left-aligned
+     by default rather than centered, which reads as inconsistent next to
+     Playtime/Price/Recommended/etc. */
+  #date-range-year {
+    text-align: center;
+  }
+
+  /* Was a border-right, separating this group from Recommended/Tags/Clear
+     on their shared line — now a border-bottom, same job stacked. */
+  #sort-controls {
+    padding-right: 0;
+    border-right: none;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  #date-filter-group #date-sort-btn {
+    flex: 1;
+  }
+
+  /* .card-main lays the cover image beside .card-info/.card-chevron on
+     desktop — too cramped at this width. Grid so .card-cover spans both
+     columns on row 1 (its own full-width row), leaving .card-info/
+     .card-chevron to auto-place side by side on row 2, same relative
+     layout as desktop. */
+  .card-main {
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+  .card-cover {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 180px;
+  }
+
+  /* Alone rather than paired — spans both columns instead of sitting
+     half-width. Was pushed to the row's far end via margin-left:auto on
+     desktop, which no longer means anything in a grid. */
+  #clear-all-btn {
+    grid-column: 1 / -1;
+    margin-left: 0;
+  }
 }
