@@ -133,6 +133,17 @@ function formatDate(str) {
 // array is still an object, so this is additive: every existing caller that
 // does .length/.map/.find/`if (!parsed)` keeps working untouched, and only
 // code that wants the shared intro text needs to read `.preamble`.
+// Strips exactly the delimiter newline(s) that serializeSubTabs (admin.html)
+// and the preamble/own-text join (`${text}\n\n${children}`, also admin.html)
+// insert around a piece of content — not a full trim — so trailing (or
+// leading) blank lines the user actually typed survive the parse/serialize
+// round trip instead of being swept up in the same strip.
+function stripDelimiterNewlines(str, leading, trailing) {
+  if (leading && str.startsWith('\n'.repeat(leading))) str = str.slice(leading);
+  if (trailing && str.endsWith('\n'.repeat(trailing))) str = str.slice(0, -trailing);
+  return str;
+}
+
 function splitSubTabs(raw) {
   if (!raw) return null;
   const tokenRe = /\[tab=([^\]]+)\]|\[\/tab\]/gi;
@@ -148,11 +159,11 @@ function splitSubTabs(raw) {
       depth++;
     } else if (depth > 0) {
       depth--;
-      if (depth === 0) tabs.push({ name, content: raw.slice(contentStart, m.index).trim() });
+      if (depth === 0) tabs.push({ name, content: stripDelimiterNewlines(raw.slice(contentStart, m.index), 1, 1) });
     }
   }
   if (!tabs.length) return null;
-  tabs.preamble = raw.slice(0, firstOpenIndex).trim();
+  tabs.preamble = stripDelimiterNewlines(raw.slice(0, firstOpenIndex), 0, 2);
   return tabs;
 }
 

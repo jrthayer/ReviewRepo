@@ -228,7 +228,7 @@
     .sub-tab-content {
       display: block; width: 100%; resize: vertical;
       background: var(--input-bg); color: var(--text); border: 1px solid var(--border);
-      border-radius: 4px; padding: 0.35rem 0.5rem; font-size: 0.75rem; font-family: inherit;
+      border-radius: 4px; padding: 0.35rem 0.5rem; font-family: inherit;
     }
     /* Stands in for a hidden field (see renderSubTabBar/updateFieldVisibility)
        — same box shape as .sub-tab-content but dashed and clickable, so it
@@ -1770,8 +1770,8 @@ function setForm(r) {
   set('f-hours',   r.hoursPlayed ?? 0);
   set('f-release-date', r.releaseDate || '');
   set('f-date',    r.datePosted  || '');
-  steamBody = r.body || '';
-  extraTabs = (r.tabs || []).map(t => ({ ...t }));
+  steamBody = canonicalizeContent(r.body || '');
+  extraTabs = (r.tabs || []).map(t => ({ ...t, content: canonicalizeContent(t.content || '') }));
   const radio = document.querySelector(`input[name="recommended"][value="${r.recommended}"]`);
   if (radio) radio.checked = true;
   currentTags = [...(r.tags || [])];
@@ -2016,7 +2016,7 @@ function combineFromDepth(fromDepth) {
   for (let d = subTabStack.length - 1; d >= fromDepth; d--) {
     const level = subTabStack[d];
     const node = level.tabs.find(t => t.id === level.activeId);
-    const ownRaw = combined === null ? node.content : (node.content.trim() ? `${node.content.trim()}\n\n${combined}` : combined);
+    const ownRaw = combined === null ? node.content : (node.content.trim() ? `${node.content}\n\n${combined}` : combined);
     combined = serializeSubTabs(level.tabs, level.activeId, ownRaw);
   }
   return combined;
@@ -2036,8 +2036,7 @@ function foldDeeperInto(depth) {
   const childrenRaw = combineFromDepth(depth + 1);
   const level = subTabStack[depth];
   const node = level.tabs.find(t => t.id === level.activeId);
-  const ownText = node.content.trim();
-  node.content = ownText ? `${ownText}\n\n${childrenRaw}` : childrenRaw;
+  node.content = node.content.trim() ? `${node.content}\n\n${childrenRaw}` : childrenRaw;
 }
 
 // Reads every level's own textarea into its active tab's `content`, then
@@ -2063,7 +2062,7 @@ function syncActiveTabContent() {
   });
 
   const raw = combineFromDepth(0);
-  const val = ownTopText.trim() ? `${ownTopText.trim()}\n\n${raw}` : raw;
+  const val = ownTopText.trim() ? `${ownTopText}\n\n${raw}` : raw;
   if (activeReviewTab === 'steam') {
     steamBody = val;
   } else {
@@ -2196,6 +2195,24 @@ function parseSubTabsForEditing(content) {
 // its own textarea keeps showing only that.
 function serializeSubTabs(subtabs, overrideId, overrideContent) {
   return subtabs.map(t => `[tab=${t.name}]\n${t.id === overrideId ? overrideContent : t.content}\n[/tab]`).join('\n\n');
+}
+
+// Round-trips raw tab content through splitSubTabs → serializeSubTabs once,
+// recursively, so it already matches whatever combineFromDepth/
+// syncActiveTabContent will inevitably reconstruct the first time this tab
+// is actually opened. Needed because stored content can carry whitespace
+// with nowhere to live in that model (e.g. a stray trailing newline after
+// the outermost [/tab], which nothing captures — not a tab's own content,
+// not the preamble) — without normalizing it up front, just clicking into
+// the tab would silently rewrite it and the dirty indicator would
+// misreport that as an unsaved edit. Called from setForm, so every loader
+// (loadReview, local drafts, discard, post-save refresh) gets it for free.
+function canonicalizeContent(content) {
+  const subTabs = splitSubTabs(content);
+  if (!subTabs) return content;
+  const canonicalTabs = subTabs.map(t => ({ name: t.name, content: canonicalizeContent(t.content) }));
+  const serialized = serializeSubTabs(canonicalTabs, null, null);
+  return subTabs.preamble.trim() ? `${subTabs.preamble}\n\n${serialized}` : serialized;
 }
 
 // Keeps the Site Card Preview's expanded sub-tab path pointed at whatever
@@ -2474,7 +2491,7 @@ function renderSubTabBar() {
       const contentBox = document.createElement('textarea');
       contentBox.className = 'sub-tab-content';
       contentBox.id = `sub-content-${depth}`;
-      contentBox.rows = 4;
+      contentBox.rows = 5;
       contentBox.value = activeTab.content || '';
       contentBox.oninput = () => { syncActiveTabContent(); updatePreview(); };
       levelWrap.appendChild(contentBox);
@@ -3913,8 +3930,17 @@ function parseReviewExport(text) {
 
   const sections = matches.map((m, i) => {
     const start = m.index + m[0].length;
-    const end = i + 1 < matches.length ? matches[i + 1].index : normalized.length;
-    return { name: m[1].trim(), content: normalized.slice(start, end).replace(/^\n+/, '').replace(/\n+$/, '') };
+    const hasNext = i + 1 < matches.length;
+    const end = hasNext ? matches[i + 1].index : normalized.length;
+    // serializeReviewForExport always inserts exactly one newline between a
+    // header and its content, and (when another section follows) exactly two
+    // newlines between content and the next header — strip only that, not
+    // every leading/trailing blank line, so the user's own blank lines
+    // survive a round trip through Export/Import.
+    let content = normalized.slice(start, end);
+    if (content.startsWith('\n')) content = content.slice(1);
+    if (hasNext && content.endsWith('\n\n')) content = content.slice(0, -2);
+    return { name: m[1].trim(), content };
   });
 
   return { fields, sections };
