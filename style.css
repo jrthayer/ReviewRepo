@@ -54,11 +54,23 @@ header {
 }
 
 #site-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
   color: var(--text);
   text-decoration: none;
   font-size: 1.4rem;
   font-weight: 700;
   letter-spacing: 0.02em;
+}
+
+/* Same "RR" mark as the favicon (FAVICON_SVG, shared.js), just colored via
+   currentColor instead of that SVG's own hardcoded light/dark colors — a
+   favicon can't see the page's CSS custom properties, but this inline copy
+   is in the DOM, so it can just inherit #site-title's color (and its hover
+   transition to --accent) directly instead of duplicating that logic. */
+#site-logo {
+  flex-shrink: 0;
 }
 
 #site-title:hover { color: var(--accent); }
