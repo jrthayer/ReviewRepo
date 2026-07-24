@@ -1781,6 +1781,8 @@ function setForm(r) {
   buildSubTabStack(steamBody);
   renderReviewTabs();
   renderSubTabBar();
+  sitePreviewBodyTab = 'steam';
+  syncSitePreviewToActiveSubTab();
 }
 
 function clearForm() {
@@ -1799,6 +1801,8 @@ function clearForm() {
   set('f-review-text', '');
   renderReviewTabs();
   renderSubTabBar();
+  sitePreviewBodyTab = 'steam';
+  syncSitePreviewToActiveSubTab();
 }
 
 // ── Review tabs ───────────────────────────────────────────────────────────────
