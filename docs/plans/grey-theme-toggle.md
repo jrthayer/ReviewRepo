@@ -52,4 +52,8 @@ Toggle button styled like the existing `#admin-link`/header `a` (muted color, no
 
 ## Verification
 
-Toggle on each page independently; confirm the whole page (cards, panels, inputs) recolors via the CSS variables with no hardcoded-color spots left over; confirm the choice survives a reload (localStorage); confirm admin's Site Card Preview panel keeps showing the site's real navy palette regardless of either toggle's state (documented as intentional above, not a bug).
+Toggled on each page independently via the browser: site `body` background went `rgb(26,26,46)` → `rgb(26,26,26)` (`--bg` navy → grey) and back; admin's went `rgb(15,15,26)` → `rgb(20,20,20)`. Confirmed the choice survives a reload (no flash — `themeAttr`/`bg` already correct on the very first read after navigating back to `/`). Confirmed the shared `site_theme` key round-trips between the two pages: toggling grey on admin and then loading the site picked it up automatically. Confirmed admin's `#site-preview` panel's `--bg` custom property stays `#1a1a2e` (the site's real navy) regardless of admin's own toggle state, per the "out of scope" note above.
+
+## Commit
+
+- `85dfc0b` — Add grey theme toggle for site and admin.
